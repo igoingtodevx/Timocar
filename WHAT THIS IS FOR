@@ -1,0 +1,124 @@
+# Auto-Beratung Website
+
+One-page car consulting website with AI-powered vehicle lookup tool. Built for a TikTok creator who offers personalized car recommendations for 49€.
+
+## What This Project Is
+
+A single-page German-language website where users can:
+1. Enter a car model and get detailed specs, known defects, and depreciation data (AI-powered)
+2. Buy a 49€ car consultation product via Stripe Checkout
+3. Fill out a form with their car preferences during checkout
+4. The site owner receives the customer's data via email and responds within 48 hours with 3 car suggestions
+
+**All user-facing text MUST be in German (Deutsch).**
+
+---
+
+## Scope
+
+### In Scope
+- One-page website (German, responsive, minimalist design)
+- AI Car Lookup Tool (enter model → specs, defects, depreciation)
+- 49€ product page with Stripe Checkout
+- Custom input form fields during/after purchase
+- Email notification to site owner on purchase
+- Legal pages: Impressum, Widerrufsbelehrung, AGB, Datenschutz
+- Hosted on a VPS (not Shopify)
+
+### Out of Scope
+- Review/rating system (separate phase)
+- Car API selection (not yet decided — multiple options available)
+- Multi-page navigation (single page only, legal pages as sub-pages)
+
+---
+
+## AI Car Lookup Tool
+
+### How It Works
+1. User enters a car model name (e.g. "Mercedes C63 AMG", "BMW M3", "Audi RS6")
+2. Loading state (~10-30 seconds, showing spinner + "Analysiere Fahrzeugdaten...")
+3. Results display:
+   - Car model name (large, bold)
+   - Spec cards in a responsive grid (PS, Verbrauch, Wertverlust, Bekannte Mängel)
+   - Expandable section: "Alle technischen Daten" (hubraum, zylinder, drehmoment, 0-100, vmax, leergewicht, etc.)
+   - Expandable section: "Bekannte Probleme & Rückrufe" (list with severity badges)
+4. Below results: CTA box "Brauchst du Hilfe? Beratung für 49€ buchen" → links to product section
+
+### Technical Notes
+- The AI tool requires a backend — the server fetches car data (from a car data API, TBD) and optionally uses an LLM (GPT-5.4-mini) to format/summarize the data for display
+- Input should be case-insensitive and trimmed
+- Empty input → inline error: "Bitte gib ein Automodell ein"
+- Results should be cached (same model lookup within a session → instant)
+- The LLM should **not** be the primary data source — it formats real API data, it does not invent specs
+
+### Data Sources (to be decided)
+Multiple car data APIs exist (specs, valuation, defects/recalls). The specific API(s) will be chosen during development. The architecture should allow swapping/combining data sources without major refactoring.
+
+---
+
+## 49€ Product & Stripe Checkout
+
+### Purchase Flow
+1. User fills out the form fields (see below)
+2. User clicks "49€ bezahlen und Beratung anfragen"
+3. Stripe Checkout session is created (server-side)
+4. User is redirected to Stripe Checkout (hosted by Stripe, PCI-compliant)
+5. After successful payment:
+   - Site owner receives an email with all customer data + form responses
+   - Customer sees a confirmation page ("Vielen Dank! Du erhältst innerhalb von 48 Stunden 3 Auto-Vorschläge per E-Mail")
+6. Stripe webhook confirms payment on the server
+
+### Form Fields (all labels in German)
+- "Dein Budget (€)" — number input
+- "Gewünschte Automarke" — text input
+- "Bevorzugter Karosserietyp" — select (Kleinwagen, Limousine, SUV, Kombi, Coupé, Cabrio, Van)
+- "Getriebe-Präferenz" — radio (Schaltgetriebe, Automatik, egal)
+- "Antrieb" — radio (Frontantrieb, Heckantrieb, Allrad, egal)
+- "Weitere Wünsche / Anmerkungen" — textarea
+- "Deine E-Mail-Adresse" — email input (required)
+
+These fields must be submitted **before or during** the Stripe Checkout — either as part of the checkout form or as a pre-checkout step that gets attached to the order via metadata.
+
+---
+
+## Legal Pages
+
+Separate sub-pages (accessible via footer links), all in German:
+- **Impressum** — Standard §5 TMG structure, with `[HIER EINTRAGEN]` placeholders for name, address, contact
+- **Widerrufsbelehrung** — Standard German withdrawal right for digital services, 14-day period
+- **AGB** — Sections: §1 Geltungsbereich, §2 Leistungen, §3 Vergütung, §4 Pflichten des Kunden, §5 Haftung, §6 Schlussbestimmungen
+- **Datenschutz** — Privacy policy placeholder
+
+Add a note on legal pages: "Dies ist eine Vorlage. Bitte durch einen Anwalt prüfen lassen."
+
+---
+
+## Hosting & Infrastructure
+
+- VPS (e.g. Hetzner Cloud, ~8€/month, 4 vCPU / 8GB RAM / 80GB)
+- Not Shopify — Shopify cannot host the AI backend
+- Server runs: website, AI backend, Stripe webhooks
+- SSL via Let's Encrypt / Caddy / Nginx (TBD)
+- Domain: TBD
+
+---
+
+## Tech Stack
+
+**Open — to be decided by the developer.** The following constraints apply:
+- All UI text in German
+- AI car tool needs a backend (server-side API calls to car data APIs + optional LLM)
+- Stripe Checkout integration (server-side checkout session creation + webhook handling)
+- Single-page frontend (no SPA framework required, but allowed)
+- Must run on a standard Linux VPS
+
+---
+
+## Client Context
+
+- Client is a TikTok creator (~500k followers), not a developer
+- He cannot visualize layouts from descriptions — he needs to see a prototype/preview
+- He will provide text content after seeing where placeholders are
+- Budget is very tight (200€ for development)
+- The client is cost-conscious — server costs should be minimal (~8€/month VPS + negligible LLM API costs)
+- Design should be simple, clean, and modern — the client explicitly said he wants "schlicht" and "sehr simpel"

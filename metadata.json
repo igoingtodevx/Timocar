@@ -1,0 +1,6 @@
+{
+  "name": "Auto-Beratung Premium",
+  "description": "Ihr persönlicher, herstellerunabhängiger Kfz-Beratungsservice – Finden Sie das perfekte Auto mit unserer intelligenten Analyse.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
