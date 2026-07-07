@@ -32,8 +32,12 @@ for (const key of REQUIRED_ENV) {
 // ─────────────────────────────────────────────
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "sk_test_placeholder", {
-  apiVersion: "2026-06-24.dahlia",
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error("STRIPE_SECRET_KEY is required for /api/create-checkout and /api/stripe-webhook");
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  // Keine apiVersion pinnen — Client wählt die zum Account passende Default-Version.
+  // Pinnen auf ein zukünftiges Datum ("2026-06-24.dahlia") führte zu 400 bei der ersten Session.
 });
 
 const mailer = nodemailer.createTransport({
@@ -185,7 +189,7 @@ Wichtig:
 - Gib niemals rein erfundene Daten als Fakten aus. Lieber "Keine gesicherten Daten verfügbar" schreiben.`;
 
     const response = await genai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.5-flash",
       contents: [
         {
           role: "user",
@@ -196,13 +200,14 @@ Wichtig:
         systemInstruction,
         tools: [{ googleSearch: {} }],
         temperature: 0.2,
+        // JSON-Mode: Gemini gibt valides JSON zurück, kein Markdown-Wrapping, kein try/catch-Parsing nötig
+        responseMimeType: "application/json",
       },
     });
 
     const rawText = response.text ?? "";
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("Gemini returned non-JSON:", rawText.slice(0, 300));
+    if (!rawText) {
+      console.error("Gemini returned empty response");
       res.status(502).json({
         error: "Die KI konnte keine strukturierte Antwort erstellen. Bitte versuche es erneut.",
       });
@@ -211,9 +216,9 @@ Wichtig:
 
     let carData: Record<string, unknown>;
     try {
-      carData = JSON.parse(jsonMatch[0]);
-    } catch {
-      console.error("JSON parse failed:", jsonMatch[0].slice(0, 300));
+      carData = JSON.parse(rawText);
+    } catch (err) {
+      console.error("JSON parse failed:", rawText.slice(0, 300));
       res.status(502).json({ error: "Fehler beim Verarbeiten der KI-Antwort." });
       return;
     }

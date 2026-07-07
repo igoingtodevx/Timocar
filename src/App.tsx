@@ -34,7 +34,8 @@ import {
   HelpCircle
 } from "lucide-react";
 
-// Predefined car mock database
+// CarDetail shape — wird sowohl vom Gemini-Backend (/api/analyze-car) als auch vom Frontend genutzt.
+// Server ist die Single Source of Truth, kein Frontend-Mock nötig.
 interface CarDetail {
   name: string;
   leistung: string;
@@ -42,95 +43,6 @@ interface CarDetail {
   wertverlust: string;
   maengel: string;
   details: string;
-}
-
-const PREDEFINED_CARS: Record<string, CarDetail> = {
-  "mercedes c63 amg": {
-    name: "Mercedes-Benz C63 AMG (W205)",
-    leistung: "476 - 510 PS (4.0L V8 Biturbo)",
-    verbrauch: "9,9 L/100km (Super Plus)",
-    wertverlust: "Hoch (~45% in 3 Jahren)",
-    maengel: "Nockenwellenversteller, Getriebe-Software-Ruckeln, extrem hoher Hinterreifen-Verschleiß bei sportlicher Fahrweise.",
-    details: "Der Mercedes-Benz C63 AMG ist eine legendäre Hochleistungs-Limousine mit brachialem V8-Sound. Zu den Stärken zählen die unbändige Kraftentfaltung, die hochwertige Verarbeitung im Interieur und die hohe Fahrstabilität. Zu den Schwachstellen gehören die extremen Unterhaltskosten (Sprit, Steuern, Versicherung) sowie kostspielige Bremsscheibenwechsel."
-  },
-  "bmw m3": {
-    name: "BMW M3 Sedan (G80)",
-    leistung: "480 - 510 PS (3.0L R6 Biturbo)",
-    verbrauch: "10,2 L/100km (Super Plus)",
-    wertverlust: "Mittel-Hoch (~38% in 3 Jahren)",
-    maengel: "Gelegentliche Elektronik-Glitches im iDrive, Anfälligkeit der vorderen Steinschlagschutzgitter, erhöhter Bremsstaub.",
-    details: "Der BMW M3 setzt Maßstäbe in Sachen Fahrdynamik und Lenkpräzision. Der extrem drehfreudige S58-Reihensechszylinder bietet Motorsport-Feeling für den Alltag. Im Vergleich zum C63 ist das Fahrwerk noch einen Tick straffer und kompromissloser abgestimmt. Hervorragender Werterhalt als Sammlerobjekt."
-  },
-  "golf gti": {
-    name: "Volkswagen Golf GTI (Mk8)",
-    leistung: "245 - 300 PS (2.0L 4-Zyl. Turbo)",
-    verbrauch: "7,0 L/100km (Super)",
-    wertverlust: "Gering (~28% in 3 Jahren)",
-    maengel: "Abstürze des Infotainment-Systems (vor Facelift), langsame Software-Reaktionszeiten, Knarzgeräusche an der Hinterachse.",
-    details: "Der Inbegriff des 'Hot Hatch'. Der Golf GTI bietet die perfekte Balance aus hoher Alltagstauglichkeit, moderaten Unterhaltskosten und agilem Fahrspaß. Die Ersatzteilversorgung ist günstig und der Werterhalt dank einer treuen Fangemeinde im Vergleich zu reinrassigen Sportwagen unschlagbar."
-  },
-  "tesla model 3": {
-    name: "Tesla Model 3 (Highland Facelift)",
-    leistung: "283 - 513 PS (Elektromotor)",
-    verbrauch: "14,7 kWh/100km",
-    wertverlust: "Mittel (~35% in 3 Jahren)",
-    maengel: "Polternde Querlenkerbuchsen bei frühen Modellen, Toleranzen bei den Spaltmaßen (historisch), hakeliges Bluetooth-Keyless-System.",
-    details: "Das Model 3 überzeugt mit extrem linearem Durchzug ab dem Stand, erstklassiger Effizienz und der besten Ladeinfrastruktur (Tesla Supercharger). Mit dem aktuellen 'Highland'-Facelift wurden Geräuschdämmung und Fahrwerkskomfort dramatisch verbessert. Sehr niedrige laufende Wartungskosten."
-  },
-  "audi rs6": {
-    name: "Audi RS6 Avant (C8)",
-    leistung: "600 - 630 PS (4.0L V8 Biturbo)",
-    verbrauch: "12,1 L/100km (Super Plus)",
-    wertverlust: "Hoch (~42% in 3 Jahren)",
-    maengel: "Verschleiß der Keramikbremsanlage (extrem teurer Austausch), Undichtigkeiten am Luftfahrwerk (Dynamic Ride Control), Ölabscheider-Defekte.",
-    details: "Der ultimative Familienkombi für die Überholspur. Der RS6 vereint brachiale Fahrleistungen dank Quattro-Allradantrieb mit einem riesigen Ladevolumen. Optisch extrem aggressiv gezeichnet. Im Unterhalt gehört dieses Fahrzeug zu den teuersten Modellen auf dem deutschen Markt überhaupt."
-  },
-  "porsche 911": {
-    name: "Porsche 911 Carrera S (Typ 992)",
-    leistung: "385 - 650 PS (3.0L Boxermotor)",
-    verbrauch: "9,6 L/100km (Super Plus)",
-    wertverlust: "Sehr Gering (~18% in 3 Jahren)",
-    maengel: "Sitzverstellungs-Elektronik, Klappergeräusche im Bereich der B-Säule, hohe Empfindlichkeit der Windschutzscheibe für Steinschläge.",
-    details: "Der Porsche 911 ist die unangefochtene Sportwagen-Ikone mit legendärer Alltagstauglichkeit. Das Fahrverhalten gilt als absolut perfekt ausbalanciert. Der Wertverlust ist im Vergleich zu allen Mitbewerbern verschwindend gering. Die Aufpreisliste ist lang, der Einstiegspreis und die Werkstattkosten sind extrem hoch."
-  }
-};
-
-function getCarAnalysis(query: string): CarDetail {
-  const q = query.toLowerCase().trim();
-  
-  // Try exact or partial match with predefined
-  for (const key of Object.keys(PREDEFINED_CARS)) {
-    if (q.includes(key) || key.includes(q)) {
-      return PREDEFINED_CARS[key];
-    }
-  }
-  
-  // Custom fallback dynamic generation
-  const formattedName = query.trim() || "Unbekanntes Fahrzeug";
-  
-  // Deterministic values based on string length to look realistic
-  const length = formattedName.length;
-  const hp = 110 + (length * 7) % 240;
-  const fuel = (5.2 + (length % 5) * 1.1).toFixed(1);
-  const depreciation = length % 3 === 0 ? "Gering (~25% in 3 Jahren)" : length % 3 === 1 ? "Mittel (~35% in 3 Jahren)" : "Hoch (~45% in 3 Jahren)";
-  
-  const defects = [
-    "Verschleiß an Querlenkern und Koppelstangen, Elektronik-Updates im Infotainment nötig.",
-    "Gelegentlicher Ölverlust an Ventildeckeldichtung, Fehlermeldungen im Abgassystem.",
-    "Erhöhter Bremsscheibenverschleiß im Stadtverkehr, Software-Hänger im Kombiinstrument.",
-    "Turbolader-Verschleiß bei unzureichendem Warm-/Kaltfahren, spröde Fahrwerksbuchsen."
-  ];
-  
-  const selectedDefect = defects[length % defects.length];
-  
-  return {
-    name: formattedName,
-    leistung: `${hp} PS (${(hp * 0.735).toFixed(0)} kW)`,
-    verbrauch: `${fuel.replace(".", ",")} L/100km (Kombiniert)`,
-    wertverlust: depreciation,
-    maengel: selectedDefect,
-    details: `Für das Modell "${formattedName}" zeigt unsere automatische KI-Datenanalyse solide Grundwerte. Es handelt sich um ein in Deutschland beliebtes Fahrzeugsegment. Zu den Vorteilen gehören die alltagstaugliche Raumausnutzung und eine bewährte Antriebstechnologie. Wir empfehlen, vor dem Kauf das Serviceheft lückenlos auf Einhaltung der Wartungsfristen zu prüfen und bei einer Probefahrt auf Poltergeräusche an der Vorderachse zu achten.`
-  };
 }
 
 export default function App() {
