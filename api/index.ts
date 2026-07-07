@@ -201,15 +201,15 @@ Wichtig:
       contents: [
         {
           role: "user",
-          parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"` }],
+          parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
         },
       ],
       config: {
         systemInstruction,
         tools: [{ googleSearch: {} }],
         temperature: 0.2,
-        // JSON-Mode: Gemini gibt valides JSON zurück, kein Markdown-Wrapping, kein try/catch-Parsing nötig
-        responseMimeType: "application/json",
+        // responseMimeType bewusst NICHT gesetzt: inkompatibel mit googleSearch-Tool.
+        // Gemini gibt dann freitext zurück, den wir per Regex parsen.
       },
     });
 
@@ -222,11 +222,21 @@ Wichtig:
       return;
     }
 
+    // Robust: erstes {...}-Block extrahieren (greedy auf äußere Klammern)
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("Gemini returned non-JSON:", rawText.slice(0, 300));
+      res.status(502).json({
+        error: "Die KI konnte keine strukturierte Antwort erstellen. Bitte versuche es erneut.",
+      });
+      return;
+    }
+
     let carData: Record<string, unknown>;
     try {
-      carData = JSON.parse(rawText);
+      carData = JSON.parse(jsonMatch[0]);
     } catch (err) {
-      console.error("JSON parse failed:", rawText.slice(0, 300));
+      console.error("JSON parse failed:", jsonMatch[0].slice(0, 300));
       res.status(502).json({ error: "Fehler beim Verarbeiten der KI-Antwort." });
       return;
     }
