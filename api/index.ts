@@ -29,26 +29,33 @@ for (const key of REQUIRED_ENV) {
 
 // ─────────────────────────────────────────────
 //  Clients
+//  Lazy init: Stripe / Nodemailer erst bei Bedarf instanziieren, damit
+//  das Modul nicht beim Import crasht, wenn ein Env-Var fehlt (sonst wirft
+//  Vercel Serverless "FUNCTION_INVOCATION_FAILED" und kein Endpoint antwortet).
 // ─────────────────────────────────────────────
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("STRIPE_SECRET_KEY is required for /api/create-checkout and /api/stripe-webhook");
+function getStripe(): Stripe {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error("STRIPE_SECRET_KEY is missing. Add it in Vercel → Project → Settings → Environment Variables.");
+  }
+  return new Stripe(process.env.STRIPE_SECRET_KEY);
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  // Keine apiVersion pinnen — Client wählt die zum Account passende Default-Version.
-  // Pinnen auf ein zukünftiges Datum ("2026-06-24.dahlia") führte zu 400 bei der ersten Session.
-});
 
-const mailer = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT ?? 587),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+function getMailer() {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error("SMTP_HOST / SMTP_USER / SMTP_PASS are missing. Add them in Vercel env vars.");
+  }
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
 
 // ─────────────────────────────────────────────
 //  In-memory rate limiter & cache
@@ -101,7 +108,7 @@ app.post(
 
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      event = getStripe().webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error("❌ Stripe webhook signature failed:", msg);
@@ -114,6 +121,7 @@ app.post(
       const meta = session.metadata ?? {};
 
       try {
+        const mailer = getMailer();
         await mailer.sendMail({
           from: `"Auto-Beratung Premium" <${process.env.SMTP_USER}>`,
           to: process.env.OWNER_EMAIL,
@@ -261,7 +269,7 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
 
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       payment_method_types: ["card", "paypal"],
       mode: "payment",
       customer_email: email.trim(),
@@ -312,7 +320,7 @@ if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`\n🚀 Auto-Beratung Backend (Lokal) läuft auf Port ${PORT}`);
     console.log(`   → Gemini API: ${process.env.GEMINI_API_KEY ? "✅ Key vorhanden" : "❌ Key fehlt!"}`);
-    console.log(`   → Stripe:     ${process.env.STRIPE_SECRET_KEY ? "✅ Key vorhanden" : "❌ Key fehlt!"}`);
+    console.log(`   → Stripe:     ${process.env.STRIPE_SECRET_KEY ? "✅ Key vorhanden" : "⚠️  Key fehlt (Checkout/Webhook deaktiviert)"}`);
   });
 }
 
