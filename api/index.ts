@@ -206,10 +206,10 @@ Wichtig:
       ],
       config: {
         systemInstruction,
-        tools: [{ googleSearch: {} }],
+        // googleSearch-Tool bewusst NICHT aktiv: Free-Tier-Projekt hat 0 Grounding-Quota.
+        // Antwort kommt aus Trainingswissen. Für Car-Specs ausreichend, für aktuelle
+        // Rückrufe/Mängel später über Car-Data-API ergänzen (TODO).
         temperature: 0.2,
-        // responseMimeType bewusst NICHT gesetzt: inkompatibel mit googleSearch-Tool.
-        // Gemini gibt dann freitext zurück, den wir per Regex parsen.
       },
     });
 
