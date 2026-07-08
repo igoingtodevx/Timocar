@@ -18,7 +18,7 @@ import {
   Fuel, 
   TrendingDown, 
   AlertTriangle, 
-  DollarSign, 
+  Euro, 
   Check, 
   ArrowRight, 
   Loader2, 
@@ -72,6 +72,39 @@ export default function App() {
   // Navigation View State
   const [activeView, setActiveView] = useState<"home" | "ai-tool">("home");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Keep track of active section for scroll-spy / navigation highlighting
+  const [activeSection, setActiveSection] = useState<string>("home");
+
+  useEffect(() => {
+    if (activeView !== "home") {
+      setActiveSection("ai-tool");
+      return;
+    }
+
+    const handleScroll = () => {
+      const bookingEl = document.getElementById("booking-section");
+      const reviewsEl = document.getElementById("reviews");
+
+      const scrollPosition = window.scrollY + window.innerHeight / 3;
+
+      if (reviewsEl && scrollPosition >= reviewsEl.offsetTop) {
+        setActiveSection("reviews");
+      } else if (bookingEl && scrollPosition >= bookingEl.offsetTop) {
+        setActiveSection("booking-section");
+      } else {
+        setActiveSection("home");
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    // Run once on mount / view change
+    handleScroll();
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [activeView]);
 
   // References for smooth scrolling
   const bookingRef = useRef<HTMLElement | null>(null);
@@ -190,7 +223,7 @@ export default function App() {
           <button
             onClick={() => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-              activeView === "home"
+              activeSection === "home"
                 ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
                 : "text-slate-400 hover:bg-white/5 hover:text-white"
             }`}
@@ -202,7 +235,7 @@ export default function App() {
           <button
             onClick={() => { setActiveView("ai-tool"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-              activeView === "ai-tool"
+              activeSection === "ai-tool"
                 ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
                 : "text-slate-400 hover:bg-white/5 hover:text-white"
             }`}
@@ -213,7 +246,11 @@ export default function App() {
 
           <button
             onClick={(e) => scrollToSection("booking-section", e)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+              activeSection === "booking-section"
+                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                : "text-slate-400 hover:bg-white/5 hover:text-white"
+            }`}
           >
             <Calendar className="w-5 h-5" />
             <span>Beratung buchen</span>
@@ -221,7 +258,11 @@ export default function App() {
 
           <button
             onClick={(e) => scrollToSection("reviews", e)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+              activeSection === "reviews"
+                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                : "text-slate-400 hover:bg-white/5 hover:text-white"
+            }`}
           >
             <Star className="w-5 h-5" />
             <span>Bewertungen</span>
@@ -289,7 +330,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveView("home"); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-                  activeView === "home"
+                  activeSection === "home"
                     ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
                     : "text-slate-400 hover:bg-white/5 hover:text-white"
                 }`}
@@ -301,7 +342,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveView("ai-tool"); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-                  activeView === "ai-tool"
+                  activeSection === "ai-tool"
                     ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
                     : "text-slate-400 hover:bg-white/5 hover:text-white"
                 }`}
@@ -312,7 +353,11 @@ export default function App() {
 
               <button
                 onClick={(e) => scrollToSection("booking-section", e)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  activeSection === "booking-section"
+                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                    : "text-slate-400 hover:bg-white/5 hover:text-white"
+                }`}
               >
                 <Calendar className="w-5 h-5" />
                 <span>Beratung buchen</span>
@@ -320,7 +365,11 @@ export default function App() {
 
               <button
                 onClick={(e) => scrollToSection("reviews", e)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  activeSection === "reviews"
+                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                    : "text-slate-400 hover:bg-white/5 hover:text-white"
+                }`}
               >
                 <Star className="w-5 h-5" />
                 <span>Bewertungen</span>
@@ -351,9 +400,9 @@ export default function App() {
           <div className="max-w-7xl mx-auto w-full h-20 px-8 lg:px-12 flex items-center justify-between">
             {/* Left: breadcrumbs / navigation indicator */}
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-              {activeView === "home" ? (
+              {activeSection === "home" ? (
                 <span className="text-slate-400">Startseite</span>
-              ) : (
+              ) : activeSection === "ai-tool" ? (
                 <>
                   <button 
                     onClick={() => setActiveView("home")} 
@@ -363,6 +412,19 @@ export default function App() {
                   </button>
                   <span className="text-slate-600">/</span>
                   <span className="text-brand-orange">KI-Fahrzeugsuche</span>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); }} 
+                    className="hover:text-brand-orange transition-colors cursor-pointer"
+                  >
+                    Startseite
+                  </button>
+                  <span className="text-slate-600">/</span>
+                  <span className="text-brand-orange">
+                    {activeSection === "booking-section" ? "Beratung buchen" : "Bewertungen"}
+                  </span>
                 </>
               )}
             </div>
@@ -868,7 +930,7 @@ export default function App() {
             </p>
             
             <div className="inline-flex items-center gap-2 bg-brand-orange/10 border border-brand-orange/20 px-5 py-2.5 rounded-2xl text-brand-orange font-bold text-lg md:text-xl shadow-sm">
-              <DollarSign className="w-5 h-5 shrink-0 stroke-[2.5]" />
+              <Euro className="w-5 h-5 shrink-0 stroke-[2.5]" />
               <span>49 € einmalig</span>
             </div>
           </div>
