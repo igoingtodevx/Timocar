@@ -178,7 +178,7 @@ export default function App() {
             </h1>
             
             <p className="text-base md:text-lg lg:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-              <span className="font-semibold text-brand-blue">[HIER TEXT: Kurze Vorstellung des Service]</span> Willkommen bei Ihrem persönlichen Kfz-Berater! Ich helfe Ihnen markenunabhängig dabei, das perfekte Auto für Ihre Bedürfnisse zu finden. Egal ob Neuwagen oder Gebrauchtwagen, sparen Sie Zeit, Nerven und bares Geld mit meiner professionellen Expertise.
+              Du weißt nicht welches Auto wirklich zu dir passt — oder willst keinen Fehlkauf riskieren? Ich bin Timo, und ich helfe dir mit echter Marktkenntnis, dem richtigen Auto für dein Budget. Kein Bullshit, kein Autohaus-Druck — nur eine ehrliche Empfehlung von jemandem, der selbst täglich Autos analysiert.
             </p>
 
             <div className="flex flex-wrap gap-4 justify-center lg:justify-start pt-2">
@@ -225,8 +225,8 @@ export default function App() {
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                     <span>
-                      <strong className="text-brand-blue block font-semibold">[HIER TEXT: Was im Service enthalten ist - Punkt 1]</strong>
-                      Individuelle Bedarfsanalyse nach deinen Wünschen, Fahrprofilen und Alltagsansprüchen.
+                      <strong className="text-brand-blue block font-semibold">Deine Kriterien, meine Recherche</strong>
+                      Ich nehme dein Budget, deine Wünsche und deinen Alltag ernst — und suche gezielt passende Fahrzeuge raus, die wirklich zu dir passen.
                     </span>
                   </li>
                   <li className="flex items-start gap-3 text-slate-600 text-sm leading-relaxed">
@@ -234,8 +234,8 @@ export default function App() {
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                     <span>
-                      <strong className="text-brand-blue block font-semibold">[HIER TEXT: Was im Service enthalten ist - Punkt 2]</strong>
-                      3 maßgeschneiderte konkrete Auto-Empfehlungen inklusive direkter Kauf-Links zu aktuellen Inseraten.
+                      <strong className="text-brand-blue block font-semibold">3 konkrete Empfehlungen mit Kauf-Links</strong>
+                      Keine Theorie — du bekommst 3 handgeprüfte Inserate mit direkten Links zu aktuellen Angeboten auf dem Markt.
                     </span>
                   </li>
                   <li className="flex items-start gap-3 text-slate-600 text-sm leading-relaxed">
@@ -243,8 +243,8 @@ export default function App() {
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                     <span>
-                      <strong className="text-brand-blue block font-semibold">[HIER TEXT: Was im Service enthalten ist - Punkt 3]</strong>
-                      Vollständige Risikoanalyse inklusive typischer Baustellen, voraussichtlichem Wertverlust und Mängelliste.
+                      <strong className="text-brand-blue block font-semibold">Risiko-Check inklusive</strong>
+                      Bekannte Schwachstellen, typischer Wertverlust und worauf du beim Kauf achten musst — damit du nicht in eine Kostenfalle tappst.
                     </span>
                   </li>
                 </ul>
@@ -301,13 +301,8 @@ export default function App() {
               <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-brand-blue/10 rounded-full -z-10" />
               
               {/* Main Avatar Frame */}
-              <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-white shadow-xl overflow-hidden relative z-10 bg-slate-200">
-                <img 
-                  src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=400&h=400" 
-                  alt="Lukas - Ihr Auto-Consultant" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
+              <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-white shadow-xl overflow-hidden relative z-10 bg-brand-blue flex items-center justify-center">
+                <span className="text-white font-extrabold text-7xl md:text-8xl font-display select-none">T</span>
               </div>
             </div>
             
@@ -315,11 +310,11 @@ export default function App() {
             <div className="mt-6 flex gap-3 z-20">
               <span className="px-3.5 py-1.5 bg-brand-light text-brand-blue text-xs font-bold rounded-full border border-slate-100 flex items-center gap-1">
                 <Award className="w-3.5 h-3.5 text-brand-orange" />
-                Zertifizierter Gutachter
+                400k+ TikTok Follower
               </span>
               <span className="px-3.5 py-1.5 bg-brand-light text-brand-blue text-xs font-bold rounded-full border border-slate-100 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-brand-orange" />
-                10+ Jahre Erfahrung
+                <Car className="w-3.5 h-3.5 text-brand-orange" />
+                BMW M4 Dream Build
               </span>
             </div>
           </div>
@@ -327,9 +322,9 @@ export default function App() {
           {/* Right: Biography & Social Proof */}
           <div className="lg:col-span-7 space-y-6">
             <div className="text-center lg:text-left">
-              <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Der Gründer</span>
+              <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Der Typ dahinter</span>
               <h2 className="font-display text-3xl md:text-4xl font-extrabold text-brand-blue mt-1">
-                Über mich
+                Hey, ich bin Timo.
               </h2>
               <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto lg:mx-0" />
             </div>
@@ -337,30 +332,30 @@ export default function App() {
             {/* Bio: Three paragraphs of German text marked as required */}
             <div className="space-y-4 text-slate-600 leading-relaxed text-sm md:text-base">
               <p>
-                <strong className="text-brand-blue font-semibold">[HIER TEXT: Bio über den Gründer, TikTok/Instagram Hintergrund]</strong> Hallo! Ich bin Lukas, Ihr unabhängiger Kfz-Berater und herstellerneutraler Auto-Experte. Auf meinen Social-Media-Kanälen auf TikTok und Instagram teile ich täglich ehrliche Autotests und decke verborgene Mängel von Gebrauchtwagen auf. Mit über 150.000 Followern habe ich mir eine leidenschaftliche Community aufgebaut, die meine herstellerunabhängige Meinung schätzt.
+                Ich mache auf TikTok Content rund ums Thema Geldverdienen, Business und — natürlich — Autos. Mit über <strong className="text-brand-blue">400.000 Followern</strong> und <strong className="text-brand-blue">6 Millionen Likes</strong> hat sich eine Community aufgebaut, die eine Meinung schätzt, die nicht von einem Autohaus bezahlt wird. Mein persönliches Ziel ist der BMW M4 — und der Weg dahin hat mich gelehrt, wie der Automarkt wirklich funktioniert.
               </p>
               <p>
-                <strong className="text-brand-blue font-semibold">[HIER TEXT: Bio über den Gründer, TikTok/Instagram Hintergrund]</strong> Meine Leidenschaft für Automobile begann bereits in meiner Kindheit. Nach jahrelanger Arbeit im klassischen Fahrzeughandel und Automobilsalons wurde mir klar, dass Autokäufer fast nie neutral beraten werden. Autohäuser wollen primär ihre eigenen Modelle verkaufen, um Verkaufsquoten zu erfüllen. Deshalb habe ich mich selbstständig gemacht: Ich berate Sie komplett neutral und stehe ausschließlich auf Ihrer Seite.
+                Was mich nervt: Autohäuser verdienen an deiner Unwissenheit. Sie verkaufen dir das Auto mit der höchsten Marge, nicht das, das am besten zu dir passt. Ich kenne die Tricks, die Preisverhandlungs-Spielchen und die typischen Schwachstellen der beliebtesten Modelle auf dem deutschen Markt — und ich teile das offen.
               </p>
               <p>
-                <strong className="text-brand-blue font-semibold">[HIER TEXT: Bio über den Gründer, TikTok/Instagram Hintergrund]</strong> Ich kenne die typischen mechanischen und elektronischen Schwachstellen fast jeder Baureihe, verstehe die undurchsichtigen Aufpreislisten und weiß genau, wie Händler kalkulieren. Meine Mission ist es, Ihnen beim Autokauf absolute Sicherheit zu verschaffen. Mit meiner Premium-Beratung helfe ich Ihnen, folgenschwere Fehlkäufe zu vermeiden und das beste Auto für Ihr Geld zu bekommen.
+                Diese Beratung ist mein Service für alle, die nicht tagelang recherchieren wollen oder sich nicht sicher sind, ob das Angebot das sie gefunden haben wirklich gut ist. Du gibst mir deine Kriterien, ich liefere dir in 48 Stunden 3 ehrliche, handgeprüfte Empfehlungen — ohne versteckte Interessen.
               </p>
             </div>
 
             {/* Social Proof Channels */}
             <div className="bg-brand-light rounded-2xl p-6 border border-slate-100 space-y-4">
               <h3 className="font-bold text-brand-blue text-sm tracking-wide uppercase">
-                Bekannt aus Social Media:
+                Bekannt von TikTok:
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* TikTok Card */}
                 <a 
-                  href="https://tiktok.com" 
+                  href="https://tiktok.com/@yotimoo1" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
-                  aria-label="Besuche Lukas auf TikTok"
+                  aria-label="Besuche Timo auf TikTok"
                 >
                   <div className="w-12 h-12 bg-slate-900 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
                     {/* Custom TikTok SVG since standard Lucide does not include it */}
@@ -370,24 +365,24 @@ export default function App() {
                   </div>
                   <div>
                     <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">TikTok</p>
-                    <p className="text-xs text-slate-500">150k+ Follower</p>
+                    <p className="text-xs text-slate-500">400k+ Follower</p>
                   </div>
                 </a>
 
                 {/* Instagram Card */}
                 <a 
-                  href="https://instagram.com" 
+                  href="https://instagram.com/yotimoo1" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
-                  aria-label="Besuche Lukas auf Instagram"
+                  aria-label="Besuche Timo auf Instagram"
                 >
                   <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
                     <Instagram className="w-6 h-6 stroke-[2]" />
                   </div>
                   <div>
                     <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">Instagram</p>
-                    <p className="text-xs text-slate-500">85k+ Abonnenten</p>
+                    <p className="text-xs text-slate-500">@yotimoo1</p>
                   </div>
                 </a>
               </div>
@@ -670,7 +665,7 @@ export default function App() {
             <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto" />
             
             <p className="text-slate-600 text-sm md:text-base max-w-xl mx-auto leading-relaxed font-medium">
-              <span className="font-bold text-brand-blue">[HIER TEXT: Was ist im Service enthalten?]</span> Sie erhalten ein umfassendes, herstellerunabhängiges PDF-Dossier mit Ihren 3 perfekt passenden Fahrzeugempfehlungen. Jedes Auto wird im Detail analysiert: Anschaffungspreis, voraussichtliche Unterhaltskosten, typische Schwachstellen, auf die Sie beim Kauf achten müssen, sowie Direktlinks zu aktuellen Angeboten.
+              Du füllst das Formular aus, ich recherchiere für dich den Markt. Du bekommst <strong className="text-brand-blue">3 konkrete Fahrzeug-Empfehlungen</strong> per E-Mail — inklusive Inserat-Links, Risiko-Check und dem, was ich dir als jemand der täglich Autos analysiert, ehrlich dazu sagen würde.
             </p>
             
             <div className="inline-flex items-center gap-2 bg-brand-orange/10 border border-brand-orange/20 px-5 py-2.5 rounded-2xl text-brand-orange font-bold text-lg md:text-xl shadow-sm">
@@ -730,7 +725,7 @@ export default function App() {
                 </div>
 
                 <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
-                  Dein maßgeschneidertes PDF-Dossier wird nun von Lukas handgeprüft und innerhalb der nächsten 48 Stunden per E-Mail an dich versendet.
+                  Deine Anfrage wird nun von Timo persönlich geprüft und innerhalb der nächsten 48 Stunden per E-Mail an dich versendet.
                 </p>
 
                 <div className="pt-4">
@@ -959,7 +954,7 @@ export default function App() {
             </h2>
             <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto" />
             <p className="text-slate-500 text-sm md:text-base">
-              Hunderte zufriedene Autokäufer haben mit meiner Beratung bereits bares Geld gespart und ihr Traumauto gefunden.
+              Leute aus der Community, die keinen Fehlkauf riskieren wollten — und es nicht bereut haben.
             </p>
           </div>
 
@@ -980,13 +975,13 @@ export default function App() {
                 
                 {/* Review Text */}
                 <p className="text-slate-600 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-brand-blue font-bold block not-italic mb-1">[Kundenbewertung 1] Unabhängig &amp; Ehrlich</span>
-                  "Dank Lukas habe ich meinen Skoda Octavia gefunden. Die Beratung war super unkompliziert, vollkommen herstellerneutral und er hat Schwachstellen aufgedeckt, an die ich nie gedacht hätte. Absolute Empfehlung für jeden Autokäufer!"
+                  <span className="text-brand-blue font-bold block not-italic mb-1">Endlich keine Angst mehr vor dem Kauf</span>
+                  "Ich hab Timo auf TikTok verfolgt und dann einfach mal die Beratung gebucht. Innerhalb von 24 Stunden hatte ich 3 konkrete Vorschläge mit allem was ich wissen muss. Bin jetzt glücklicher Besitzer eines VW Golf R — und hab dabei noch 1.500 Euro gespart."
                 </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-200/50 flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-brand-blue text-sm">Michael S.</span>
+                <span className="font-bold text-brand-blue text-sm">Mika S.</span>
                 <span>vor 2 Wochen</span>
               </div>
             </div>
@@ -1005,13 +1000,13 @@ export default function App() {
                 
                 {/* Review Text */}
                 <p className="text-slate-600 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-brand-blue font-bold block not-italic mb-1">[Kundenbewertung 2] Extrem schnell &amp; passgenau</span>
-                  "Ich wusste überhaupt nicht, welches Auto zu meinem neuen Job passt. Nach nur 24 Stunden hatte ich die 3 passgenauen Vorschläge im Posteingang. Es ist ein BMW 3er Touring geworden. Ein absolut toller Kauf!"
+                  <span className="text-brand-blue font-bold block not-italic mb-1">Hat mir echt Nerven gespart</span>
+                  "Ich hatte null Plan welches Auto ich nehmen soll und wollte nicht einfach irgendwas kaufen. Die Empfehlung kam schnell, war super verständlich erklärt und Timo hat genau gewusst worauf ich achten muss. Jetzt fahre ich einen BMW 3er und bereue nichts."
                 </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-200/50 flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-brand-blue text-sm">Sarah M.</span>
+                <span className="font-bold text-brand-blue text-sm">Lena K.</span>
                 <span>vor 1 Monat</span>
               </div>
             </div>
@@ -1030,14 +1025,14 @@ export default function App() {
                 
                 {/* Review Text */}
                 <p className="text-slate-600 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-brand-blue font-bold block not-italic mb-1">[Kundenbewertung 3] Spart echtes Geld</span>
-                  "Auf Social Media verfolge ich seine Auto-Checks schon lange. Die Beratung hält genau das, was sie verspricht: unkompliziert, kompetent und spart durch seine konkreten Preisverhandlungstipps bares Geld. Top Service!"
+                  <span className="text-brand-blue font-bold block not-italic mb-1">49€ die sich mehr als gelohnt haben</span>
+                  "Timos TikToks kenn ich schon lange, aber die Beratung hat nochmal einen draufgesetzt. Er hat mir direkt gesagt welches der drei Autos er selbst nehmen würde und warum. Das ist genau das was man braucht wenn man unsicher ist. Absolute Empfehlung!"
                 </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-200/50 flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-brand-blue text-sm">David K.</span>
-                <span>vor 3 Monaten</span>
+                <span className="font-bold text-brand-blue text-sm">Jonas W.</span>
+                <span>vor 3 Wochen</span>
               </div>
             </div>
 
@@ -1066,8 +1061,8 @@ export default function App() {
           
           {/* Left: Copyright */}
           <div className="text-center md:text-left space-y-1">
-            <p className="font-bold text-white text-base tracking-wide uppercase">Auto-Beratung Premium</p>
-            <p className="text-xs text-slate-500">© 2026 Lukas Weber Kfz-Consulting. Alle Rechte vorbehalten.</p>
+            <p className="font-bold text-white text-base tracking-wide uppercase">Timo's Auto-Beratung</p>
+            <p className="text-xs text-slate-500">© 2026 YoTimo Auto-Beratung. Alle Rechte vorbehalten.</p>
           </div>
 
           {/* Right: German Links */}
@@ -1133,21 +1128,23 @@ export default function App() {
                 <div className="space-y-4">
                   <p className="font-bold text-brand-blue text-base">Angaben gemäß § 5 TMG:</p>
                   <p>
-                    Lukas Weber Kfz-Beratung Premium<br />
-                    Autofreundstraße 12<br />
-                    80331 München
+                    YoTimo Auto-Beratung<br />
+                    {/* TODO: Echte Adresse hier eintragen */}
+                    [Straße und Hausnummer]<br />
+                    [PLZ und Stadt]
                   </p>
                   <p className="font-semibold text-brand-blue">Kontakt:</p>
                   <p>
-                    Telefon: +49 (0) 89 1234567<br />
-                    E-Mail: beratung@lukas-weber-kfz.de
+                    {/* TODO: Echte Kontaktdaten eintragen */}
+                    Telefon: [Telefonnummer]<br />
+                    E-Mail: [kontakt@email.de]
                   </p>
                   <p className="font-semibold text-brand-blue">Umsatzsteuer-ID:</p>
-                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz: DE123456789</p>
+                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz: [USt-ID]</p>
                   <p className="font-semibold text-brand-blue">Berufsbezeichnung &amp; Berufsregeln:</p>
-                  <p>Gewerbeanmeldung nach § 14 GewO erteilt durch die Landeshauptstadt München.</p>
+                  <p>Gewerbeanmeldung nach § 14 GewO erteilt durch die zuständige Gemeinde.</p>
                   <p className="font-semibold text-brand-blue">Redaktionell verantwortlich:</p>
-                  <p>Lukas Weber (Anschrift wie oben)</p>
+                  <p>Timo (Anschrift wie oben)</p>
                   <p className="font-semibold text-brand-blue">Streitschlichtung:</p>
                   <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://ec.europa.eu/consumers/odr</a>. Zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle sind wir nicht verpflichtet und nicht bereit.</p>
                 </div>
@@ -1158,7 +1155,7 @@ export default function App() {
                   <p className="font-bold text-brand-blue text-base">Widerrufsbelehrung</p>
                   <p className="font-semibold text-brand-blue">Widerrufsrecht</p>
                   <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
-                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (Lukas Weber Kfz-Beratung, Autofreundstraße 12, 80331 München, E-Mail: beratung@lukas-weber-kfz.de) mittels einer eindeutigen Erklärung (z.B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
+                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, [Adresse], E-Mail: [kontakt@email.de]) mittels einer eindeutigen Erklärung (z.B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
                   
                   <p className="font-semibold text-brand-blue">Vorzeitiges Erlöschen des Widerrufsrechts</p>
                   <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 italic text-xs">
@@ -1174,7 +1171,7 @@ export default function App() {
                 <div className="space-y-4">
                   <p className="font-bold text-brand-blue text-base">Allgemeine Geschäftsbedingungen (AGB)</p>
                   <p className="font-semibold text-brand-blue">§ 1 Geltungsbereich und Vertragspartner</p>
-                  <p>Diese AGB gelten für alle Dienstleistungen zwischen Lukas Weber Kfz-Beratung (nachfolgend „Dienstleister“) und dem Kunden. Vertragspartner ist ausschließlich Lukas Weber.</p>
+                  <p>Diese AGB gelten für alle Dienstleistungen zwischen YoTimo Auto-Beratung (nachfolgend „Dienstleister“) und dem Kunden. Vertragspartner ist ausschließlich Timo.</p>
                   
                   <p className="font-semibold text-brand-blue">§ 2 Vertragsgegenstand &amp; Leistungsumfang</p>
                   <p>Gegenstand des Vertrages ist die herstellerunabhängige Kaufberatung für Kraftfahrzeuge. Der Dienstleister erstellt ein personalisiertes PDF-Dossier mit 3 Fahrzeugvorschlägen auf Basis der vom Kunden übermittelten Angaben. Es handelt sich um ein Dienstleistungsverhältnis, nicht um eine Vermittlung oder Gewährleistung für den tatsächlichen Kaufzustand eines empfohlenen Fahrzeugs.</p>
@@ -1200,7 +1197,7 @@ export default function App() {
                   <p>Wenn Sie eine Beratung anfordern, erheben wir die von Ihnen eingegebenen Daten (Budget, Wunschmarke, Karosserietyp, Getriebeart, Antrieb und Ihre E-Mail-Adresse). Diese Daten werden ausschließlich zur Bearbeitung und Zusendung Ihrer Kaufempfehlungen verwendet und nicht an unbefugte Dritte weitergegeben.</p>
 
                   <p className="font-semibold text-brand-blue">3. Ihre Rechte (Auskunft, Löschung, Sperrung)</p>
-                  <p>Sie haben jederzeit das Recht auf unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und Empfänger und den Zweck der Datenverarbeitung sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Schreiben Sie uns dazu einfach eine E-Mail an: datenschutz@lukas-weber-kfz.de</p>
+                  <p>Sie haben jederzeit das Recht auf unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und Empfänger und den Zweck der Datenverarbeitung sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Schreiben Sie uns dazu einfach eine E-Mail an: [datenschutz@email.de]</p>
 
                   <p className="font-semibold text-brand-blue">4. Datensicherheit</p>
                   <p>Ihre Daten werden über eine verschlüsselte SSL-Verbindung (HTTPS) übertragen, um unberechtigte Zugriffe Dritter bestmöglich zu verhindern.</p>
