@@ -444,7 +444,7 @@ export default function App() {
               <a 
                 href="#booking-section"
                 onClick={(e) => scrollToSection("booking-section", e)}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-brand-orange text-white font-bold rounded-xl shadow-sm hover:bg-[#e05621] transition-colors duration-200 text-center uppercase tracking-wider text-[11px]"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-brand-orange text-white font-bold rounded-xl shadow-sm hover:bg-[#e05621] transition-colors duration-200 text-center uppercase tracking-wider text-sm"
                 aria-label="Jetzt Beratung buchen"
               >
                 Jetzt Beratung buchen
@@ -454,7 +454,7 @@ export default function App() {
               {/* Trust Indicators */}
               <div className="mt-8 flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-[0.15em]">
                 <div className="flex items-center gap-1.5 font-bold">
-                  <span className="text-brand-orange">★ 4.9/5</span>
+                  <span className="text-brand-orange">★ 4.8/5</span>
                   <span>Zufriedenheit</span>
                 </div>
                 <div className="w-1 h-1 rounded-full bg-slate-700" />
@@ -472,17 +472,13 @@ export default function App() {
       {/* 2. "ABOUT ME" SECTION (CLEAN MINIMAL PANEL) */}
       <section 
         id="about-me" 
-        className="bg-brand-light/30 backdrop-blur rounded-3xl border border-[#333333] p-8 md:p-12 shadow-sm"
+        className="bg-brand-light/30 rounded-2xl border border-[#333333] p-8 md:p-12 shadow-sm"
       >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           
           {/* Left: Avatar Column */}
           <div className="lg:col-span-5 flex flex-col items-center justify-center">
             <div className="relative">
-              {/* Background decorative circles */}
-              <div className="absolute inset-0 bg-brand-orange/10 rounded-full scale-105 blur-md" />
-              <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-brand-orange/5 rounded-full -z-10" />
-              
               {/* Main Avatar Frame */}
               <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-[#262626] shadow-xl overflow-hidden relative z-10 bg-gradient-to-tr from-brand-orange to-[#e05621] flex items-center justify-center">
                 <span className="text-white font-extrabold text-7xl md:text-8xl font-display select-none">T</span>
@@ -597,11 +593,8 @@ export default function App() {
           {/* 3. CAR AI TOOL SECTION (PREMIUM DARK PANEL) */}
           <section 
             id="ai-tool" 
-            className="bg-brand-dark text-white rounded-3xl p-8 md:p-12 shadow-sm border border-white/5 relative overflow-hidden scroll-mt-6"
+            className="bg-brand-dark text-white rounded-2xl p-8 md:p-12 shadow-sm border border-white/5 relative overflow-hidden scroll-mt-6"
       >
-        {/* Background ambient lighting */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-orange/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-brand-blue/20 rounded-full blur-3xl pointer-events-none" />
         
         <div className="relative z-10">
           
@@ -621,7 +614,7 @@ export default function App() {
           </div>
 
           {/* Interactive Input Form */}
-          <div className="bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-8 border border-white/10 shadow-xl max-w-3xl mx-auto">
+          <div className="bg-white/5 rounded-2xl p-6 md:p-8 border border-white/10 shadow-xl max-w-3xl mx-auto">
             <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-grow">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
@@ -726,7 +719,7 @@ export default function App() {
                   </div>
                   <div className="shrink-0">
                     <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20 text-xs font-semibold">
-                      <CheckCircle className="w-3.5 h-3.5 animate-pulse" />
+                      <CheckCircle className="w-3.5 h-3.5" />
                       Erfolgreich ausgewertet
                     </span>
                   </div>
@@ -736,7 +729,7 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   
                   {/* Card 1: Leistung */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
                     <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Leistung (PS)</span>
                       <Gauge className="w-5 h-5 text-brand-orange" />
@@ -747,7 +740,7 @@ export default function App() {
                   </div>
 
                   {/* Card 2: Verbrauch */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
                     <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Verbrauch</span>
                       <Fuel className="w-5 h-5 text-brand-orange" />
@@ -758,7 +751,7 @@ export default function App() {
                   </div>
 
                   {/* Card 3: Wertverlust */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
                     <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Wertverlust</span>
                       <TrendingDown className="w-5 h-5 text-brand-orange" />
@@ -769,7 +762,7 @@ export default function App() {
                   </div>
 
                   {/* Card 4: Bekannte Mängel */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors min-w-0">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors min-w-0">
                     <div className="flex items-center justify-between text-slate-400 gap-2 min-w-0">
                       <span className="text-xs font-semibold tracking-wider uppercase">Bekannte Mängel</span>
                       <AlertTriangle className="w-5 h-5 text-brand-orange shrink-0" />
@@ -811,7 +804,7 @@ export default function App() {
                       <p className="font-medium">{analyzedCar.details}</p>
                       <div className="p-4 bg-brand-orange/10 border border-brand-orange/20 rounded-xl space-y-2">
                         <h4 className="font-bold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider">
-                          <AlertTriangle className="w-4 h-4 text-brand-orange animate-pulse" />
+                          <AlertTriangle className="w-4 h-4 text-brand-orange" />
                           Schwachstellen im Detail:
                         </h4>
                         <p className="text-xs text-slate-200 leading-relaxed font-semibold">{analyzedCar.maengel}</p>
@@ -829,7 +822,7 @@ export default function App() {
           </div>
 
           {/* CTA Banner at the bottom of the section */}
-          <div className="mt-12 bg-gradient-to-r from-[#1E1E1E] to-[#111111] rounded-3xl p-6 md:p-8 border border-[#333333] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl max-w-4xl mx-auto">
+          <div className="mt-12 bg-gradient-to-r from-[#1E1E1E] to-[#111111] rounded-2xl p-6 md:p-8 border border-[#333333] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl max-w-4xl mx-auto">
             <div className="space-y-2 text-center md:text-left">
               <h3 className="text-xl md:text-2xl font-bold text-white font-display">
                 Brauchst du Hilfe bei der Auswahl?
@@ -859,7 +852,7 @@ export default function App() {
           <section 
             id="booking-section" 
             ref={bookingRef}
-            className="bg-brand-light/30 backdrop-blur rounded-3xl border border-[#333333] p-8 md:p-12 shadow-sm scroll-mt-6"
+            className="bg-brand-light/30 rounded-2xl border border-[#333333] p-8 md:p-12 shadow-sm scroll-mt-6"
           >
         <div className="w-full max-w-3xl mx-auto">
           
@@ -881,10 +874,10 @@ export default function App() {
           </div>
 
           {/* Booking / Purchase Form */}
-          <div className="bg-brand-light rounded-3xl border border-[#333333] shadow-lg overflow-hidden">
+          <div className="bg-brand-light rounded-2xl border border-[#333333] shadow-lg overflow-hidden">
             <div className="bg-[#111111] border-b border-[#333333] text-white p-5 px-6 md:px-8 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <ShieldCheck className="w-6 h-6 text-brand-orange shrink-0 animate-pulse" />
+                <ShieldCheck className="w-6 h-6 text-brand-orange shrink-0" />
                 <div>
                   <h3 className="font-bold text-sm md:text-base font-display">Sicherer Checkout</h3>
                   <p className="text-xs text-slate-400">Deine Anfrage wird direkt bearbeitet</p>
@@ -1246,7 +1239,7 @@ export default function App() {
 
           {/* Rating Summary Block */}
           <div className="mt-12 text-center">
-            <div className="inline-flex flex-col sm:flex-row items-center justify-center gap-3 bg-brand-light/30 border border-[#333333] rounded-3xl p-4 px-6 md:px-8 shadow-sm">
+              <div className="inline-flex flex-col sm:flex-row items-center justify-center gap-3 bg-brand-light/30 border border-[#333333] rounded-2xl p-4 px-6 md:px-8 shadow-sm">
               <div className="flex items-center gap-1.5 text-amber-500 font-bold text-lg">
                 <Star className="w-5 h-5 fill-current" />
                 <span>4.8 / 5</span>
@@ -1313,7 +1306,7 @@ export default function App() {
       {/* INTERACTIVE LEGAL MODAL COMPONENT (Provides professional details on click) */}
       {activeModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#262626] rounded-3xl border border-[#333333] max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative">
+          <div className="bg-[#262626] rounded-2xl border border-[#333333] max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative">
             
             {/* Sticky Header */}
             <div className="sticky top-0 bg-[#111111] border-b border-[#333333] p-5 px-6 flex items-center justify-between z-10">
@@ -1341,17 +1334,17 @@ export default function App() {
                   <p>
                     YoTimo Auto-Beratung<br />
                     {/* TODO: Echte Adresse hier eintragen */}
-                    [Straße und Hausnummer]<br />
-                    [PLZ und Stadt]
+                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Straße und Hausnummer]</span><br />
+                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: PLZ und Stadt]</span>
                   </p>
                   <p className="font-semibold text-white">Kontakt:</p>
                   <p>
                     {/* TODO: Echte Kontaktdaten eintragen */}
-                    Telefon: [Telefonnummer]<br />
-                    E-Mail: [kontakt@email.de]
+                    Telefon: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Telefonnummer]</span><br />
+                    E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>
                   </p>
                   <p className="font-semibold text-white">Umsatzsteuer-ID:</p>
-                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz: [USt-ID]</p>
+                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: USt-ID]</span></p>
                   <p className="font-semibold text-white">Berufsbezeichnung &amp; Berufsregeln:</p>
                   <p>Gewerbeanmeldung nach § 14 GewO erteilt durch die zuständige Gemeinde.</p>
                   <p className="font-semibold text-white">Redaktionell verantwortlich:</p>
@@ -1366,7 +1359,7 @@ export default function App() {
                   <p className="font-bold text-white text-base">Widerrufsbelehrung</p>
                   <p className="font-semibold text-white">Widerrufsrecht</p>
                   <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
-                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, [Adresse], E-Mail: [kontakt@email.de]) mittels einer eindeutigen Erklärung (z.B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
+                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Adresse]</span>, E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>) mittels einer eindeutigen Erklärung (z.B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
                   
                   <p className="font-semibold text-white">Vorzeitiges Erlöschen des Widerrufsrechts</p>
                   <p className="bg-[#1A1A1A] p-3 rounded-lg border border-[#333333] italic text-xs text-slate-450">
@@ -1408,7 +1401,7 @@ export default function App() {
                   <p>Wenn Sie eine Beratung anfordern, erheben wir die von Ihnen eingegebenen Daten (Budget, Wunschmarke, Karosserietyp, Getriebeart, Antrieb und Ihre E-Mail-Adresse). Diese Daten werden ausschließlich zur Bearbeitung und Zusendung Ihrer Kaufempfehlungen verwendet und nicht an unbefugte Dritte weitergegeben.</p>
 
                   <p className="font-semibold text-white">3. Ihre Rechte (Auskunft, Löschung, Sperrung)</p>
-                  <p>Sie haben jederzeit das Recht auf unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und Empfänger und den Zweck der Datenverarbeitung sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Schreiben Sie uns dazu einfach eine E-Mail an: [datenschutz@email.de]</p>
+                  <p>Sie haben jederzeit das Recht auf unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und Empfänger und den Zweck der Datenverarbeitung sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Schreiben Sie uns dazu einfach eine E-Mail an: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: datenschutz@email.de]</span></p>
 
                   <p className="font-semibold text-white">4. Datensicherheit</p>
                   <p>Ihre Daten werden über eine verschlüsselte SSL-Verbindung (HTTPS) übertragen, um unberechtigte Zugriffe Dritter bestmöglich zu verhindern.</p>
