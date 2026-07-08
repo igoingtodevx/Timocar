@@ -18,7 +18,6 @@ import {
   Fuel, 
   TrendingDown, 
   AlertTriangle, 
-  Euro, 
   Check, 
   ArrowRight, 
   Loader2, 
@@ -400,9 +399,9 @@ export default function App() {
           <div className="max-w-7xl mx-auto w-full h-20 px-8 lg:px-12 flex items-center justify-between">
             {/* Left: breadcrumbs / navigation indicator */}
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-              {activeSection === "home" ? (
+              {activeView === "home" ? (
                 <span className="text-slate-400">Startseite</span>
-              ) : activeSection === "ai-tool" ? (
+              ) : (
                 <>
                   <button 
                     onClick={() => setActiveView("home")} 
@@ -412,19 +411,6 @@ export default function App() {
                   </button>
                   <span className="text-slate-600">/</span>
                   <span className="text-brand-orange">KI-Fahrzeugsuche</span>
-                </>
-              ) : (
-                <>
-                  <button 
-                    onClick={() => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); }} 
-                    className="hover:text-brand-orange transition-colors cursor-pointer"
-                  >
-                    Startseite
-                  </button>
-                  <span className="text-slate-600">/</span>
-                  <span className="text-brand-orange">
-                    {activeSection === "booking-section" ? "Beratung buchen" : "Bewertungen"}
-                  </span>
                 </>
               )}
             </div>
@@ -929,8 +915,7 @@ export default function App() {
               Du füllst das Formular aus, ich recherchiere für dich den Markt. Du bekommst <strong className="text-white">3 konkrete Fahrzeug-Empfehlungen</strong> per E-Mail — inklusive Inserat-Links, Risiko-Check und dem, was ich dir als jemand der täglich Autos analysiert, ehrlich dazu sagen würde.
             </p>
             
-            <div className="inline-flex items-center gap-2 bg-brand-orange/10 border border-brand-orange/20 px-5 py-2.5 rounded-2xl text-brand-orange font-bold text-lg md:text-xl shadow-sm">
-              <Euro className="w-5 h-5 shrink-0 stroke-[2.5]" />
+            <div className="inline-flex items-center bg-brand-orange/10 border border-brand-orange/20 px-5 py-2.5 rounded-2xl text-brand-orange font-bold text-lg md:text-xl shadow-sm">
               <span>49 € einmalig</span>
             </div>
           </div>
