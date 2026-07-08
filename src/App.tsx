@@ -9,7 +9,6 @@ import {
   ShieldCheck, 
   Star, 
   Award, 
-  CheckCircle2, 
   Instagram, 
   Search, 
   Sparkles, 
@@ -351,7 +350,7 @@ export default function App() {
         <header className="hidden lg:block border-b border-[#333333] sticky top-0 bg-brand-dark/80 backdrop-blur-md z-20 w-full">
           <div className="max-w-7xl mx-auto w-full h-20 px-8 lg:px-12 flex items-center justify-between">
             {/* Left: breadcrumbs / navigation indicator */}
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
               {activeView === "home" ? (
                 <span className="text-slate-400">Startseite</span>
               ) : (
@@ -369,11 +368,9 @@ export default function App() {
             </div>
 
             {/* Right: status indicator */}
-            <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/5 border border-emerald-500/10 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
-                Online-Beratung aktiv
-              </span>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>Status: Online</span>
             </div>
           </div>
         </header>
@@ -384,19 +381,14 @@ export default function App() {
               {/* 1. HERO SECTION */}
               <section 
                 id="home" 
-                className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:pt-8 lg:pb-20 bg-brand-dark overflow-hidden"
+                className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:pt-16 lg:pb-24 bg-brand-dark overflow-hidden"
               >
-                {/* Background ambient lighting */}
-                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand-orange/5 rounded-full blur-3xl pointer-events-none -z-10" />
-                <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
-                
-                <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center relative z-10">
+                <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start relative z-10">
           
           {/* Left Column: Headline and Subheading */}
           <div className="lg:col-span-7 space-y-6 md:space-y-8 text-center lg:text-left relative z-10">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-brand-orange/5 border border-brand-orange/15 rounded-full text-brand-orange text-xs font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Herstellerunabhängige Beratung</span>
+            <div className="text-[10px] font-bold text-brand-orange uppercase tracking-[0.2em] mb-4">
+              Herstellerunabhängige Beratung
             </div>
             
             <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -407,105 +399,76 @@ export default function App() {
               Du weißt nicht welches Auto wirklich zu dir passt — oder willst keinen Fehlkauf riskieren? Ich bin Timo, und ich helfe dir mit echter Marktkenntnis, dem richtigen Auto für dein Budget. Kein Bullshit, kein Autohaus-Druck — nur eine ehrliche Empfehlung von jemandem, der selbst täglich Autos analysiert.
             </p>
 
-            <div className="flex flex-wrap gap-4 justify-center lg:justify-start pt-2">
-              <div className="flex items-center gap-2 text-slate-300 text-sm font-medium bg-brand-light px-4 py-2.5 rounded-xl border border-[#333333] shadow-sm">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                <span>Markenneutral</span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-300 text-sm font-medium bg-brand-light px-4 py-2.5 rounded-xl border border-[#333333] shadow-sm">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                <span>Finanziell unabhängig</span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-300 text-sm font-medium bg-brand-light px-4 py-2.5 rounded-xl border border-[#333333] shadow-sm">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                <span>Geprüfte Qualität</span>
-              </div>
+            <div className="flex flex-wrap items-center gap-4 text-[11px] font-bold uppercase tracking-wider text-slate-400 justify-center lg:justify-start pt-6 border-t border-[#333333]/50 mt-8">
+              <span>Markenneutral</span>
+              <span className="text-slate-700 font-normal">//</span>
+              <span>Finanziell unabhängig</span>
+              <span className="text-slate-700 font-normal">//</span>
+              <span>Geprüfte Qualität</span>
             </div>
           </div>
 
-          {/* Right Column: Premium Product Card */}
-          <div className="lg:col-span-5 w-full max-w-md mx-auto relative z-10">
-            <div className="bg-brand-light/50 backdrop-blur rounded-3xl border border-[#333333] p-6 md:p-8 shadow-xl hover:shadow-2xl hover:border-[#444444] transition-all duration-300 transform hover:-translate-y-1 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-brand-orange/5 rounded-full -mr-10 -mt-10 group-hover:scale-125 transition-transform duration-500" />
+          {/* Right Column: Premium Service Details (Swiss/Editorial Layout) */}
+          <div className="lg:col-span-5 w-full max-w-md mx-auto lg:border-l lg:border-[#333333] lg:pl-12 relative z-10">
+            <div className="relative">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2 block">
+                Dienstleistung
+              </span>
               
-              <div className="relative">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-brand-orange/10 rounded-md text-brand-orange text-xs font-semibold uppercase tracking-wider mb-4">
-                  Bestseller
-                </div>
-                
-                <h2 className="text-2xl font-bold text-white mb-1">
-                  Auto-Beratung Premium
-                </h2>
-                
-                <div className="flex items-baseline gap-2 my-4">
-                  <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">49 €</span>
-                  <span className="text-slate-400 text-sm font-medium">einmalig, inkl. MwSt.</span>
-                </div>
-
-                <hr className="border-[#333333] my-5" />
-
-                {/* 3 bullet points with placeholder text */}
-                <ul className="space-y-4 mb-8">
-                  <li className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
-                    <div className="p-1 bg-brand-orange/10 rounded-full mt-0.5 shrink-0 text-brand-orange">
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    </div>
-                    <span>
-                      <strong className="text-white block font-semibold">Deine Kriterien, meine Recherche</strong>
-                      Ich nehme dein Budget, deine Wünsche und deinen Alltag ernst — und suche gezielt passende Fahrzeuge raus, die wirklich zu dir passen.
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
-                    <div className="p-1 bg-brand-orange/10 rounded-full mt-0.5 shrink-0 text-brand-orange">
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    </div>
-                    <span>
-                      <strong className="text-white block font-semibold">3 konkrete Empfehlungen mit Kauf-Links</strong>
-                      Keine Theorie — du bekommst 3 handgeprüfte Inserate mit direkten Links zu aktuellen Angeboten auf dem Markt.
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
-                    <div className="p-1 bg-brand-orange/10 rounded-full mt-0.5 shrink-0 text-brand-orange">
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    </div>
-                    <span>
-                      <strong className="text-white block font-semibold">Risiko-Check inklusive</strong>
-                      Bekannte Schwachstellen, typischer Wertverlust und worauf du beim Kauf achten musst — damit du nicht in eine Kostenfalle tappst.
-                    </span>
-                  </li>
-                </ul>
-
-                <a 
-                  href="#booking-section"
-                  onClick={(e) => scrollToSection("booking-section", e)}
-                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-brand-orange text-white font-bold rounded-2xl shadow-lg shadow-brand-orange/20 hover:bg-[#e05621] hover:shadow-xl hover:shadow-brand-orange/30 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:ring-offset-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] text-center"
-                  aria-label="Jetzt Beratung buchen"
-                >
-                  Jetzt Beratung buchen
-                  <ArrowRight className="w-5 h-5 stroke-[2.5]" />
-                </a>
-
-                {/* Trust Indicators */}
-                <div className="mt-6 flex items-center justify-center gap-6 text-xs text-slate-400 border-t border-[#333333] pt-5">
-                  <div className="flex flex-col items-center">
-                    <div className="flex items-center gap-1 text-amber-500 font-semibold text-sm">
-                      <Star className="w-4 h-4 fill-current stroke-current" />
-                      <Star className="w-4 h-4 fill-current stroke-current" />
-                      <Star className="w-4 h-4 fill-current stroke-current" />
-                      <Star className="w-4 h-4 fill-current stroke-current" />
-                      <Star className="w-4 h-4 fill-current stroke-current" />
-                      <span className="text-white ml-1">4.9/5</span>
-                    </div>
-                    <span className="text-slate-500 mt-0.5">Kundenzufriedenheit</span>
-                  </div>
-                  <div className="w-px h-8 bg-[#333333]" />
-                  <div className="flex flex-col items-center">
-                    <span className="font-bold text-white text-sm">100% Garantie</span>
-                    <span className="text-slate-500 mt-0.5">Zufriedenheit oder Geld zurück</span>
-                  </div>
-                </div>
-
+              <h2 className="text-3xl font-extrabold text-white mb-2 font-display">
+                Auto-Beratung Premium
+              </h2>
+              
+              <div className="flex items-baseline gap-2 my-5">
+                <span className="text-5xl font-black text-white tracking-tight">49 €</span>
+                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">einmalig, inkl. MwSt.</span>
               </div>
+
+              <hr className="border-[#333333] my-6" />
+
+              <ul className="space-y-6 mb-8">
+                <li className="flex flex-col gap-1.5 pb-5 border-b border-[#333333]/40">
+                  <span className="text-white text-xs font-bold uppercase tracking-wider">1. Recherche & Kriterien</span>
+                  <span className="text-slate-400 text-xs leading-relaxed">
+                    Ich nehme dein Budget, deine Wünsche und deinen Alltag ernst — und suche gezielt passende Fahrzeuge raus, die wirklich zu dir passen.
+                  </span>
+                </li>
+                <li className="flex flex-col gap-1.5 pb-5 border-b border-[#333333]/40">
+                  <span className="text-white text-xs font-bold uppercase tracking-wider">2. 3 Empfehlungen mit Links</span>
+                  <span className="text-slate-400 text-xs leading-relaxed">
+                    Keine graue Theorie — du bekommst 3 handgeprüfte Inserate mit direkten Links zu aktuellen Angeboten auf dem Markt.
+                  </span>
+                </li>
+                <li className="flex flex-col gap-1.5 pb-1">
+                  <span className="text-white text-xs font-bold uppercase tracking-wider">3. Risiko-Check inklusive</span>
+                  <span className="text-slate-400 text-xs leading-relaxed">
+                    Bekannte Schwachstellen, typischer Wertverlust und worauf du beim Kauf achten musst — damit du nicht in eine Kostenfalle tappst.
+                  </span>
+                </li>
+              </ul>
+
+              <a 
+                href="#booking-section"
+                onClick={(e) => scrollToSection("booking-section", e)}
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-brand-orange text-white font-bold rounded-xl shadow-sm hover:bg-[#e05621] transition-colors duration-200 text-center uppercase tracking-wider text-[11px]"
+                aria-label="Jetzt Beratung buchen"
+              >
+                Jetzt Beratung buchen
+                <ArrowRight className="w-4 h-4" />
+              </a>
+
+              {/* Trust Indicators */}
+              <div className="mt-8 flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-[0.15em]">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span className="text-brand-orange">★ 4.9/5</span>
+                  <span>Zufriedenheit</span>
+                </div>
+                <div className="w-1 h-1 rounded-full bg-slate-700" />
+                <div className="font-bold text-white">
+                  100% Geld-zurück-Garantie
+                </div>
+              </div>
+
             </div>
           </div>
 
