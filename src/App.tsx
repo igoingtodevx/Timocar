@@ -239,7 +239,7 @@ export default function App() {
 
                   <h1 className="font-display font-black leading-[0.88] tracking-tight">
                     <span className="block text-6xl md:text-7xl lg:text-[84px] text-white">Finde dein</span>
-                    <span className="block text-6xl md:text-7xl lg:text-[84px] text-stroke-orange">PERFEKTES</span>
+                    <span className="block text-6xl md:text-7xl lg:text-[84px] text-brand-orange italic">PERFEKTES</span>
                     <span className="block text-6xl md:text-7xl lg:text-[84px] text-white">Auto.</span>
                   </h1>
 
