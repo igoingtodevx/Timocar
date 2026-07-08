@@ -196,22 +196,38 @@ Wichtig:
 - Falls du das Modell nicht eindeutig identifizieren kannst, gib im Feld "name" an, was du verstanden hast, und erkläre in "details", dass du keine gesicherten Daten gefunden hast.
 - Gib niemals rein erfundene Daten als Fakten aus. Lieber "Keine gesicherten Daten verfügbar" schreiben.`;
 
-    const response = await genai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
+    let response;
+    try {
+      console.log("Attempting vehicle analysis using primary model: gemini-3.1-flash-lite");
+      response = await genai.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
+          },
+        ],
+        config: {
+          systemInstruction,
+          temperature: 0.2,
         },
-      ],
-      config: {
-        systemInstruction,
-        // googleSearch-Tool bewusst NICHT aktiv: Free-Tier-Projekt hat 0 Grounding-Quota.
-        // Antwort kommt aus Trainingswissen. Für Car-Specs ausreichend, für aktuelle
-        // Rückrufe/Mängel später über Car-Data-API ergänzen (TODO).
-        temperature: 0.2,
-      },
-    });
+      });
+    } catch (err) {
+      console.warn("Primary model (gemini-3.1-flash-lite) failed. Falling back to gemini-3.5-flash. Error:", err instanceof Error ? err.message : err);
+      response = await genai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
+          },
+        ],
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+        },
+      });
+    }
 
     const rawText = response.text ?? "";
     if (!rawText) {
