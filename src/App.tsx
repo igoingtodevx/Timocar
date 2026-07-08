@@ -394,7 +394,7 @@ export default function App() {
                   className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
                   aria-label="Timocar auf Enricha"
                 >
-                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-white border border-slate-100">
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-slate-900 border border-slate-800">
                     <img src="/enricha.png" alt="Enricha" className="w-full h-full object-cover" />
                   </div>
                   <div>
