@@ -348,7 +348,7 @@ export default function App() {
                 Bekannt von TikTok:
               </h3>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* TikTok Card */}
                 <a 
                   href="https://tiktok.com/@yotimoo1" 
@@ -376,6 +376,32 @@ export default function App() {
                   rel="noopener noreferrer"
                   className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
                   aria-label="Besuche Timo auf Instagram"
+                >
+                  <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                    <Instagram className="w-6 h-6 stroke-[2]" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">Instagram</p>
+                    <p className="text-xs text-slate-500">@yotimoo1</p>
+                  </div>
+                </a>
+
+                {/* Enricha Card */}
+                <a
+                  href="https://enricha.de/products/tiktok-anleitung-2025"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
+                  aria-label="Timocar auf Enricha"
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-white border border-slate-100">
+                    <img src="/enricha.png" alt="Enricha" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">Enricha</p>
+                    <p className="text-xs text-slate-500">TikTok Kurs</p>
+                  </div>
+                </a>
                 >
                   <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
                     <Instagram className="w-6 h-6 stroke-[2]" />
