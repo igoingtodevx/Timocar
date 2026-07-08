@@ -551,8 +551,8 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   
                   {/* Card 1: Leistung */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between mb-3 text-slate-400">
+                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                    <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Leistung (PS)</span>
                       <Gauge className="w-5 h-5 text-brand-orange" />
                     </div>
@@ -562,8 +562,8 @@ export default function App() {
                   </div>
 
                   {/* Card 2: Verbrauch */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between mb-3 text-slate-400">
+                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                    <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Verbrauch</span>
                       <Fuel className="w-5 h-5 text-brand-orange" />
                     </div>
@@ -573,8 +573,8 @@ export default function App() {
                   </div>
 
                   {/* Card 3: Wertverlust */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between mb-3 text-slate-400">
+                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                    <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Wertverlust</span>
                       <TrendingDown className="w-5 h-5 text-brand-orange" />
                     </div>
@@ -584,13 +584,13 @@ export default function App() {
                   </div>
 
                   {/* Card 4: Bekannte Mängel */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between mb-3 text-slate-400">
+                  <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
+                    <div className="flex items-center justify-between text-slate-400">
                       <span className="text-xs font-semibold tracking-wider uppercase">Bekannte Mängel</span>
                       <AlertTriangle className="w-5 h-5 text-brand-orange" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white truncate" title={analyzedCar.maengel}>
+                      <p className="text-sm font-bold text-white" title={analyzedCar.maengel}>
                         {analyzedCar.maengel.split(",")[0]}
                       </p>
                     </div>
