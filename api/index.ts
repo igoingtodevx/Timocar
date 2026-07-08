@@ -96,6 +96,42 @@ function setCache(key: string, data: unknown) {
 // ─────────────────────────────────────────────
 //  App Setup
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+//  Exa Grounding (kostenloses Web-Search-Grounding)
+// ─────────────────────────────────────────────
+async function getExaContext(vehicle: string): Promise<string> {
+  const key = process.env.EXA_API_KEY;
+  if (!key) {
+    console.warn("⚠️ EXA_API_KEY fehlt — kein Grounding möglich");
+    return "";
+  }
+  const body = {
+    query: `${vehicle} technische Daten Leistung Verbrauch Wertverlust bekannte Mängel`,
+    type: "neural",
+    numResults: 5,
+    contents: { text: true, highlight: false },
+  };
+  const exaRes = await fetch("https://api.exa.ai/search", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!exaRes.ok) {
+    throw new Error(`Exa HTTP ${exaRes.status}: ${await exaRes.text().catch(() => "")}`);
+  }
+  const json = (await exaRes.json()) as {
+    results?: Array<{ title?: string; url?: string; text?: string }>;
+  };
+  const snippets = (json.results ?? []).map((r, i) => {
+    const text = (r.text ?? "").replace(/\s+/g, " ").trim().slice(0, 1200);
+    return `[${i + 1}] ${r.title ?? "ohne Titel"}\n${text}\nQuelle: ${r.url ?? "unbekannt"}`;
+  });
+  return snippets.join("\n\n").slice(0, 6000);
+}
+
 const app = express();
 
 // Stripe webhook needs raw body — must be BEFORE express.json()
@@ -164,6 +200,18 @@ app.post("/api/analyze-car", async (req: Request, res: Response) => {
 
   const normalizedQuery = query.trim().toLowerCase().slice(0, 200);
 
+  // Exa-Grounding: aktuelle Web-Auszüge holen und in die Analyse einbetten
+  let exaContext = "";
+  try {
+    exaContext = await getExaContext(query.trim());
+  } catch (exaErr) {
+    console.warn("⚠️ Exa-Grounding fehlgeschlagen, fahre ohne Kontext fort:", exaErr instanceof Error ? exaErr.message : exaErr);
+  }
+  const groundedQuery = exaContext
+    ? query.trim() + "\n\n=== AKTUELLE WEB-RECHERCHE (stütze alle Zahlen auf diese Quellen) ===\n" + exaContext
+    : query.trim();
+
+
   if (!checkRateLimit(ip)) {
     res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
     return;
@@ -191,7 +239,7 @@ Das JSON-Format muss EXAKT diesem Schema entsprechen:
 }
 
 Wichtig:
-- Nutze die Google-Suche aktiv, um aktuelle, verifizierte Daten zu finden (ADAC, Autobild, Wikipedia, Hersteller-Webseiten).
+- Im Prompt wird dir ein Abschnitt "AKTUELLE WEB-RECHERCHE" mit aktuellen Quellenauszügen (Exa-Suche) mitgegeben. Stütze ALLE Zahlenwerte (PS, kW, Verbrauch, Wertverlust, bekannte Mängel) primär auf diese Quellen. Bei widersprüchlichen Angaben nenne die Spanne. Erfinde keine Daten, die nicht in den Quellen stehen.
 - Alle Zahlenangaben in metrischen Einheiten (PS, km/h, Liter, kg) — NICHT imperial.
 - Falls du das Modell nicht eindeutig identifizieren kannst, gib im Feld "name" an, was du verstanden hast, und erkläre in "details", dass du keine gesicherten Daten gefunden hast.
 - Gib niemals rein erfundene Daten als Fakten aus. Lieber "Keine gesicherten Daten verfügbar" schreiben.`;
@@ -204,7 +252,7 @@ Wichtig:
         contents: [
           {
             role: "user",
-            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
+            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${groundedQuery}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
           },
         ],
         config: {
@@ -219,7 +267,7 @@ Wichtig:
         contents: [
           {
             role: "user",
-            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${query.trim()}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
+            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${groundedQuery}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
           },
         ],
         config: {
