@@ -98,26 +98,21 @@ function setCache(key: string, data: unknown) {
 // ─────────────────────────────────────────────
 // ─────────────────────────────────────────────
 //  Exa Grounding (kostenloses Web-Search-Grounding)
+//  Zwei gezielte Queries: Technik-Specs + bekannte Mängel/Schwachstellen.
+//  Mängel sind das wichtigste Feature → eigene, fokussierte Recherche.
 // ─────────────────────────────────────────────
-async function getExaContext(vehicle: string): Promise<string> {
+async function exaSearch(query: string, n: number): Promise<string[]> {
   const key = process.env.EXA_API_KEY;
-  if (!key) {
-    console.warn("⚠️ EXA_API_KEY fehlt — kein Grounding möglich");
-    return "";
-  }
-  const body = {
-    query: `${vehicle} technische Daten Leistung Verbrauch Wertverlust bekannte Mängel`,
-    type: "neural",
-    numResults: 5,
-    contents: { text: true, highlight: false },
-  };
+  if (!key) throw new Error("EXA_API_KEY fehlt");
   const exaRes = await fetch("https://api.exa.ai/search", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-    },
-    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "x-api-key": key },
+    body: JSON.stringify({
+      query,
+      type: "neural",
+      numResults: n,
+      contents: { text: true, highlight: false },
+    }),
   });
   if (!exaRes.ok) {
     throw new Error(`Exa HTTP ${exaRes.status}: ${await exaRes.text().catch(() => "")}`);
@@ -125,11 +120,42 @@ async function getExaContext(vehicle: string): Promise<string> {
   const json = (await exaRes.json()) as {
     results?: Array<{ title?: string; url?: string; text?: string }>;
   };
-  const snippets = (json.results ?? []).map((r, i) => {
+  return (json.results ?? []).map((r) => {
     const text = (r.text ?? "").replace(/\s+/g, " ").trim().slice(0, 1200);
-    return `[${i + 1}] ${r.title ?? "ohne Titel"}\n${text}\nQuelle: ${r.url ?? "unbekannt"}`;
+    return `[${r.title ?? "ohne Titel"}]\n${text}\nQuelle: ${r.url ?? "unbekannt"}`;
   });
-  return snippets.join("\n\n").slice(0, 6000);
+}
+
+async function getExaContext(vehicle: string): Promise<string> {
+  const key = process.env.EXA_API_KEY;
+  if (!key) {
+    console.warn("⚠️ EXA_API_KEY fehlt — kein Grounding möglich");
+    return "";
+  }
+  // Specs-Recherche (Leistung, Verbrauch, Wertverlust)
+  const specQuery = `${vehicle} technische Daten Leistung PS kW Verbrauch Wertverlust`;
+  // Mängel-Recherche (eigenständig, damit die echten Schwachstellen rankommen)
+  const flawQuery = `${vehicle} bekannte Mängel Schwachstellen typische Probleme Ausfälle Forum Rückruf`;
+
+  const [specs, flaws] = await Promise.allSettled([
+    exaSearch(specQuery, 4),
+    exaSearch(flawQuery, 6),
+  ]).then((results) =>
+    results.map((r) => (r.status === "fulfilled" ? r.value : []))
+  );
+
+  if (specs.length === 0 && flaws.length === 0) {
+    throw new Error("Exa lieferte keine Ergebnisse");
+  }
+
+  const parts: string[] = [];
+  if (specs.length) {
+    parts.push("=== TECHNISCHE SPECS (Quellen) ===\n" + specs.join("\n\n"));
+  }
+  if (flaws.length) {
+    parts.push("=== BEKANNTE MÄNGEL & SCHWACHSTELLEN (Quellen) ===\n" + flaws.join("\n\n"));
+  }
+  return parts.join("\n\n").slice(0, 9000);
 }
 
 const app = express();
@@ -239,7 +265,7 @@ Das JSON-Format muss EXAKT diesem Schema entsprechen:
 }
 
 Wichtig:
-- Im Prompt wird dir ein Abschnitt "AKTUELLE WEB-RECHERCHE" mit aktuellen Quellenauszügen (Exa-Suche) mitgegeben. Stütze ALLE Zahlenwerte (PS, kW, Verbrauch, Wertverlust, bekannte Mängel) primär auf diese Quellen. Bei widersprüchlichen Angaben nenne die Spanne. Erfinde keine Daten, die nicht in den Quellen stehen.
+- Im Prompt wird dir ein Abschnitt mit aktuellen Quellenauszügen (Exa-Suche) mitgegeben, unterteilt in "TECHNISCHE SPECS" und "BEKANNTE MÄNGEL & SCHWACHSTELLEN".\n- Stütze die Felder Leistung/Verbrauch/Wertverlust AUSSCHLIESSLICH auf den SPECS-Abschnitt.\n- Das Feld "maengel" MUSS aus dem MÄNGEL-Abschnitt stammen: nenne die konkreten, dort genannten Schwachstellen (z.B. Turbolager, gerissene Kopfschrauben, Kupplung, Ölverbrauch). Erfinde KEINE Mängel, die nicht in den Quellen stehen, und LASSE die wichtigsten genannten nicht weg.\n- Bei widersprüchlichen Angaben nenne die Spanne. Erfinde niemals Daten ohne Quelle.
 - Alle Zahlenangaben in metrischen Einheiten (PS, km/h, Liter, kg) — NICHT imperial.
 - Falls du das Modell nicht eindeutig identifizieren kannst, gib im Feld "name" an, was du verstanden hast, und erkläre in "details", dass du keine gesicherten Daten gefunden hast.
 - Gib niemals rein erfundene Daten als Fakten aus. Lieber "Keine gesicherten Daten verfügbar" schreiben.`;
