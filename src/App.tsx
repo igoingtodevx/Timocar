@@ -402,15 +402,6 @@ export default function App() {
                     <p className="text-xs text-slate-500">TikTok Kurs</p>
                   </div>
                 </a>
-                >
-                  <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
-                    <Instagram className="w-6 h-6 stroke-[2]" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">Instagram</p>
-                    <p className="text-xs text-slate-500">@yotimoo1</p>
-                  </div>
-                </a>
               </div>
             </div>
 
