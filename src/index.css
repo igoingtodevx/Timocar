@@ -5,8 +5,9 @@
   --font-sans: "Inter", system-ui, sans-serif;
   --font-display: "Outfit", "Inter", system-ui, sans-serif;
   
-  --color-brand-blue: #1a3a5c;
-  --color-brand-orange: #ff6b35;
-  --color-brand-dark: #1a1a2e;
-  --color-brand-light: #f5f5f7;
+  --color-brand-blue: #111111;
+  --color-brand-orange: #ff8a00;
+  --color-brand-dark: #1A1A1A;
+  --color-brand-light: #262626;
+  --color-brand-border: #333333;
 }

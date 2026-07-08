@@ -9,7 +9,6 @@ import {
   ShieldCheck, 
   Star, 
   Award, 
-  Users, 
   CheckCircle2, 
   Instagram, 
   Search, 
@@ -23,15 +22,15 @@ import {
   DollarSign, 
   Check, 
   ArrowRight, 
-  Clock, 
   Loader2, 
   X, 
   Lock, 
   Mail,
-  ThumbsUp,
   Sliders,
   CheckCircle,
-  HelpCircle
+  Menu,
+  Home,
+  Calendar
 } from "lucide-react";
 
 // CarDetail shape — wird sowohl vom Gemini-Backend (/api/analyze-car) als auch vom Frontend genutzt.
@@ -71,12 +70,26 @@ export default function App() {
   // Legal Modal States
   const [activeModal, setActiveModal] = useState<string | null>(null);
 
+  // Navigation View State
+  const [activeView, setActiveView] = useState<"home" | "ai-tool">("home");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   // References for smooth scrolling
   const bookingRef = useRef<HTMLElement | null>(null);
 
-  const scrollToBooking = (e: React.MouseEvent) => {
-    e.preventDefault();
-    bookingRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToSection = (id: string, e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    setIsMobileMenuOpen(false);
+    if (activeView !== "home") {
+      setActiveView("home");
+      setTimeout(() => {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } else {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   const handleAnalyze = async (e: React.FormEvent) => {
@@ -157,40 +170,217 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex flex-col min-h-screen bg-white font-sans text-slate-800">
-      
-      {/* 1. HERO SECTION */}
-      <section 
-        id="home" 
-        className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:py-24 xl:min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50/50"
-      >
-        <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+    <div className="flex min-h-screen bg-brand-dark font-sans text-slate-300">
+      {/* Sidebar - Desktop */}
+      <aside className="hidden lg:flex flex-col w-72 bg-[#111111] border-r border-[#333333] shrink-0 fixed inset-y-0 left-0 z-20">
+        <div className="p-6 border-b border-[#333333] flex items-center gap-3">
+          <div className="p-2.5 bg-brand-orange/10 rounded-xl text-brand-orange">
+            <Car className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="font-display font-extrabold text-white text-lg tracking-tight leading-none uppercase">
+              Timo's
+            </h1>
+            <span className="text-[10px] text-brand-orange font-bold tracking-widest uppercase">
+              Auto-Beratung
+            </span>
+          </div>
+        </div>
+
+        <nav className="flex-grow p-4 space-y-1.5 overflow-y-auto">
+          <button
+            onClick={() => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+              activeView === "home"
+                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                : "text-slate-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            <Home className="w-5 h-5" />
+            <span>Startseite</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveView("ai-tool"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+              activeView === "ai-tool"
+                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                : "text-slate-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            <Search className="w-5 h-5" />
+            <span>KI-Fahrzeugsuche</span>
+          </button>
+
+          <button
+            onClick={(e) => scrollToSection("booking-section", e)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+          >
+            <Calendar className="w-5 h-5" />
+            <span>Beratung buchen</span>
+          </button>
+
+          <button
+            onClick={(e) => scrollToSection("reviews", e)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+          >
+            <Star className="w-5 h-5" />
+            <span>Bewertungen</span>
+          </button>
+        </nav>
+
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-[#333333] space-y-3">
+          <div className="text-[10px] text-slate-500 font-medium px-2">
+            © 2026 YoTimo Auto-Beratung
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5 px-2 text-[10px] font-semibold text-slate-400">
+            <button onClick={() => setActiveModal("impressum")} className="hover:text-brand-orange cursor-pointer">Impressum</button>
+            <button onClick={() => setActiveModal("widerruf")} className="hover:text-brand-orange cursor-pointer">Widerruf</button>
+            <button onClick={() => setActiveModal("agb")} className="hover:text-brand-orange cursor-pointer">AGB</button>
+            <button onClick={() => setActiveModal("datenschutz")} className="hover:text-brand-orange cursor-pointer">Datenschutz</button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile Top Navigation Bar */}
+      <header className="lg:hidden flex items-center justify-between px-6 py-4 bg-[#111111] border-b border-[#333333] fixed top-0 left-0 right-0 z-30 h-16">
+        <div className="flex items-center gap-2">
+          <Car className="w-5 h-5 text-brand-orange" />
+          <span className="font-display font-extrabold text-white text-base tracking-tight uppercase">
+            Timo's Auto-Beratung
+          </span>
+        </div>
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-1.5 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer focus:outline-none"
+          aria-label="Menü öffnen"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+      </header>
+
+      {/* Mobile Sidebar / Drawer */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          {/* Overlay */}
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300" 
+            onClick={() => setIsMobileMenuOpen(false)} 
+          />
+          {/* Menu Panel */}
+          <aside className="relative flex flex-col w-72 max-w-xs bg-[#111111] border-r border-[#333333] h-full z-50 p-6 shadow-2xl flex-shrink-0">
+            <div className="flex items-center justify-between pb-6 border-b border-[#333333] mb-6">
+              <div className="flex items-center gap-2.5">
+                <Car className="w-5 h-5 text-brand-orange" />
+                <span className="font-display font-extrabold text-white text-base tracking-tight uppercase">
+                  Timo's
+                </span>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+                aria-label="Menü schließen"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <nav className="flex-grow space-y-1.5 overflow-y-auto">
+              <button
+                onClick={() => { setActiveView("home"); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  activeView === "home"
+                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                    : "text-slate-400 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Home className="w-5 h-5" />
+                <span>Startseite</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveView("ai-tool"); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  activeView === "ai-tool"
+                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
+                    : "text-slate-400 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Search className="w-5 h-5" />
+                <span>KI-Fahrzeugsuche</span>
+              </button>
+
+              <button
+                onClick={(e) => scrollToSection("booking-section", e)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+              >
+                <Calendar className="w-5 h-5" />
+                <span>Beratung buchen</span>
+              </button>
+
+              <button
+                onClick={(e) => scrollToSection("reviews", e)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-slate-400 hover:bg-white/5 hover:text-white text-sm transition-all duration-200 cursor-pointer"
+              >
+                <Star className="w-5 h-5" />
+                <span>Bewertungen</span>
+              </button>
+            </nav>
+
+            {/* Sidebar Footer */}
+            <div className="pt-6 border-t border-[#333333] space-y-3 mt-auto">
+              <div className="text-[10px] text-slate-500 font-medium px-2">
+                © 2026 YoTimo Auto-Beratung
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1.5 px-2 text-[10px] font-semibold text-slate-400">
+                <button onClick={() => { setActiveModal("impressum"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">Impressum</button>
+                <button onClick={() => { setActiveModal("widerruf"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">Widerruf</button>
+                <button onClick={() => { setActiveModal("agb"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">AGB</button>
+                <button onClick={() => { setActiveModal("datenschutz"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">Datenschutz</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex-grow flex flex-col lg:pl-72 pt-16 lg:pt-0 min-h-screen bg-brand-dark overflow-x-hidden">
+        <main className="flex-grow p-4 md:p-8 lg:p-12 max-w-7xl mx-auto w-full space-y-12">
+          {activeView === "home" ? (
+            <>
+              {/* 1. HERO SECTION */}
+              <section 
+                id="home" 
+                className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:py-24 bg-brand-dark"
+              >
+                <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
           
           {/* Left Column: Headline and Subheading */}
-          <div className="lg:col-span-7 space-y-6 md:space-y-8 text-center lg:text-left">
+          <div className="lg:col-span-7 space-y-6 md:space-y-8 text-center lg:text-left relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-orange/10 rounded-full text-brand-orange text-sm font-semibold tracking-wide">
               <Sparkles className="w-4 h-4" />
               <span>Herstellerunabhängige Beratung</span>
             </div>
             
-            <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-extrabold text-brand-blue leading-tight tracking-tight">
+            <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
               Finde dein <span className="text-brand-orange">perfektes</span> Auto
             </h1>
             
-            <p className="text-base md:text-lg lg:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0">
+            <p className="text-base md:text-lg lg:text-xl text-slate-400 leading-relaxed max-w-2xl mx-auto lg:mx-0">
               Du weißt nicht welches Auto wirklich zu dir passt — oder willst keinen Fehlkauf riskieren? Ich bin Timo, und ich helfe dir mit echter Marktkenntnis, dem richtigen Auto für dein Budget. Kein Bullshit, kein Autohaus-Druck — nur eine ehrliche Empfehlung von jemandem, der selbst täglich Autos analysiert.
             </p>
 
             <div className="flex flex-wrap gap-4 justify-center lg:justify-start pt-2">
-              <div className="flex items-center gap-2 text-slate-600 text-sm font-medium bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 text-slate-300 text-sm font-medium bg-brand-light px-4 py-2.5 rounded-xl border border-[#333333] shadow-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                 <span>Markenneutral</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-600 text-sm font-medium bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 text-slate-300 text-sm font-medium bg-brand-light px-4 py-2.5 rounded-xl border border-[#333333] shadow-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                 <span>Finanziell unabhängig</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-600 text-sm font-medium bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 text-slate-300 text-sm font-medium bg-brand-light px-4 py-2.5 rounded-xl border border-[#333333] shadow-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                 <span>Geprüfte Qualität</span>
               </div>
@@ -198,52 +388,52 @@ export default function App() {
           </div>
 
           {/* Right Column: Premium Product Card */}
-          <div className="lg:col-span-5 w-full max-w-md mx-auto">
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-xl hover:shadow-2xl hover:border-slate-300 transition-all duration-300 transform hover:-translate-y-1 relative overflow-hidden group">
+          <div className="lg:col-span-5 w-full max-w-md mx-auto relative z-10">
+            <div className="bg-brand-light/50 backdrop-blur rounded-3xl border border-[#333333] p-6 md:p-8 shadow-xl hover:shadow-2xl hover:border-[#444444] transition-all duration-300 transform hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-brand-orange/5 rounded-full -mr-10 -mt-10 group-hover:scale-125 transition-transform duration-500" />
               
               <div className="relative">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-brand-blue/5 rounded-md text-brand-blue text-xs font-semibold uppercase tracking-wider mb-4">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-brand-orange/10 rounded-md text-brand-orange text-xs font-semibold uppercase tracking-wider mb-4">
                   Bestseller
                 </div>
                 
-                <h2 className="text-2xl font-bold text-brand-blue mb-1">
+                <h2 className="text-2xl font-bold text-white mb-1">
                   Auto-Beratung Premium
                 </h2>
                 
                 <div className="flex items-baseline gap-2 my-4">
-                  <span className="text-4xl md:text-5xl font-extrabold text-brand-blue tracking-tight">49 €</span>
-                  <span className="text-slate-500 text-sm font-medium">einmalig, inkl. MwSt.</span>
+                  <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">49 €</span>
+                  <span className="text-slate-400 text-sm font-medium">einmalig, inkl. MwSt.</span>
                 </div>
 
-                <hr className="border-slate-100 my-5" />
+                <hr className="border-[#333333] my-5" />
 
                 {/* 3 bullet points with placeholder text */}
                 <ul className="space-y-4 mb-8">
-                  <li className="flex items-start gap-3 text-slate-600 text-sm leading-relaxed">
+                  <li className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
                     <div className="p-1 bg-brand-orange/10 rounded-full mt-0.5 shrink-0 text-brand-orange">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                     <span>
-                      <strong className="text-brand-blue block font-semibold">Deine Kriterien, meine Recherche</strong>
+                      <strong className="text-white block font-semibold">Deine Kriterien, meine Recherche</strong>
                       Ich nehme dein Budget, deine Wünsche und deinen Alltag ernst — und suche gezielt passende Fahrzeuge raus, die wirklich zu dir passen.
                     </span>
                   </li>
-                  <li className="flex items-start gap-3 text-slate-600 text-sm leading-relaxed">
+                  <li className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
                     <div className="p-1 bg-brand-orange/10 rounded-full mt-0.5 shrink-0 text-brand-orange">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                     <span>
-                      <strong className="text-brand-blue block font-semibold">3 konkrete Empfehlungen mit Kauf-Links</strong>
+                      <strong className="text-white block font-semibold">3 konkrete Empfehlungen mit Kauf-Links</strong>
                       Keine Theorie — du bekommst 3 handgeprüfte Inserate mit direkten Links zu aktuellen Angeboten auf dem Markt.
                     </span>
                   </li>
-                  <li className="flex items-start gap-3 text-slate-600 text-sm leading-relaxed">
+                  <li className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
                     <div className="p-1 bg-brand-orange/10 rounded-full mt-0.5 shrink-0 text-brand-orange">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                     <span>
-                      <strong className="text-brand-blue block font-semibold">Risiko-Check inklusive</strong>
+                      <strong className="text-white block font-semibold">Risiko-Check inklusive</strong>
                       Bekannte Schwachstellen, typischer Wertverlust und worauf du beim Kauf achten musst — damit du nicht in eine Kostenfalle tappst.
                     </span>
                   </li>
@@ -251,7 +441,7 @@ export default function App() {
 
                 <a 
                   href="#booking-section"
-                  onClick={scrollToBooking}
+                  onClick={(e) => scrollToSection("booking-section", e)}
                   className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-brand-orange text-white font-bold rounded-2xl shadow-lg shadow-brand-orange/20 hover:bg-[#e05621] hover:shadow-xl hover:shadow-brand-orange/30 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:ring-offset-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] text-center"
                   aria-label="Jetzt Beratung buchen"
                 >
@@ -260,7 +450,7 @@ export default function App() {
                 </a>
 
                 {/* Trust Indicators */}
-                <div className="mt-6 flex items-center justify-center gap-6 text-xs text-slate-500 border-t border-slate-100 pt-5">
+                <div className="mt-6 flex items-center justify-center gap-6 text-xs text-slate-400 border-t border-[#333333] pt-5">
                   <div className="flex flex-col items-center">
                     <div className="flex items-center gap-1 text-amber-500 font-semibold text-sm">
                       <Star className="w-4 h-4 fill-current stroke-current" />
@@ -268,14 +458,14 @@ export default function App() {
                       <Star className="w-4 h-4 fill-current stroke-current" />
                       <Star className="w-4 h-4 fill-current stroke-current" />
                       <Star className="w-4 h-4 fill-current stroke-current" />
-                      <span className="text-brand-blue ml-1">4.9/5</span>
+                      <span className="text-white ml-1">4.9/5</span>
                     </div>
-                    <span className="text-slate-400 mt-0.5">Kundenzufriedenheit</span>
+                    <span className="text-slate-500 mt-0.5">Kundenzufriedenheit</span>
                   </div>
-                  <div className="w-px h-8 bg-slate-200" />
+                  <div className="w-px h-8 bg-[#333333]" />
                   <div className="flex flex-col items-center">
-                    <span className="font-bold text-brand-blue text-sm">100% Garantie</span>
-                    <span className="text-slate-400 mt-0.5">Zufriedenheit oder Geld zurück</span>
+                    <span className="font-bold text-white text-sm">100% Garantie</span>
+                    <span className="text-slate-500 mt-0.5">Zufriedenheit oder Geld zurück</span>
                   </div>
                 </div>
 
@@ -289,7 +479,7 @@ export default function App() {
       {/* 2. "ABOUT ME" SECTION (CLEAN MINIMAL PANEL) */}
       <section 
         id="about-me" 
-        className="bg-white rounded-3xl border border-slate-100 p-8 md:p-12 shadow-sm"
+        className="bg-brand-light/30 backdrop-blur rounded-3xl border border-[#333333] p-8 md:p-12 shadow-sm"
       >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           
@@ -298,21 +488,21 @@ export default function App() {
             <div className="relative">
               {/* Background decorative circles */}
               <div className="absolute inset-0 bg-brand-orange/10 rounded-full scale-105 blur-md" />
-              <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-brand-blue/10 rounded-full -z-10" />
+              <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-brand-orange/5 rounded-full -z-10" />
               
               {/* Main Avatar Frame */}
-              <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-white shadow-xl overflow-hidden relative z-10 bg-brand-blue flex items-center justify-center">
+              <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-[#262626] shadow-xl overflow-hidden relative z-10 bg-gradient-to-tr from-brand-orange to-[#e05621] flex items-center justify-center">
                 <span className="text-white font-extrabold text-7xl md:text-8xl font-display select-none">T</span>
               </div>
             </div>
             
             {/* Badges below avatar */}
             <div className="mt-6 flex gap-3 z-20">
-              <span className="px-3.5 py-1.5 bg-brand-light text-brand-blue text-xs font-bold rounded-full border border-slate-100 flex items-center gap-1">
+              <span className="px-3.5 py-1.5 bg-[#1A1A1A] text-white text-xs font-bold rounded-full border border-[#333333] flex items-center gap-1">
                 <Award className="w-3.5 h-3.5 text-brand-orange" />
                 400k+ TikTok Follower
               </span>
-              <span className="px-3.5 py-1.5 bg-brand-light text-brand-blue text-xs font-bold rounded-full border border-slate-100 flex items-center gap-1">
+              <span className="px-3.5 py-1.5 bg-[#1A1A1A] text-white text-xs font-bold rounded-full border border-[#333333] flex items-center gap-1">
                 <Car className="w-3.5 h-3.5 text-brand-orange" />
                 BMW M4 Dream Build
               </span>
@@ -323,16 +513,16 @@ export default function App() {
           <div className="lg:col-span-7 space-y-6">
             <div className="text-center lg:text-left">
               <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Der Typ dahinter</span>
-              <h2 className="font-display text-3xl md:text-4xl font-extrabold text-brand-blue mt-1">
+              <h2 className="font-display text-3xl md:text-4xl font-extrabold text-white mt-1">
                 Hey, ich bin Timo.
               </h2>
               <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto lg:mx-0" />
             </div>
 
             {/* Bio: Three paragraphs of German text marked as required */}
-            <div className="space-y-4 text-slate-600 leading-relaxed text-sm md:text-base">
+            <div className="space-y-4 text-slate-300 leading-relaxed text-sm md:text-base">
               <p>
-                Ich mache auf TikTok Content rund ums Thema Geldverdienen, Business und — natürlich — Autos. Mit über <strong className="text-brand-blue">400.000 Followern</strong> und <strong className="text-brand-blue">6 Millionen Likes</strong> hat sich eine Community aufgebaut, die eine Meinung schätzt, die nicht von einem Autohaus bezahlt wird. Mein persönliches Ziel ist der BMW M4 — und der Weg dahin hat mich gelehrt, wie der Automarkt wirklich funktioniert.
+                Ich mache auf TikTok Content rund ums Thema Geldverdienen, Business und — natürlich — Autos. Mit über <strong className="text-white">400.000 Followern</strong> und <strong className="text-white">6 Millionen Likes</strong> hat sich eine Community aufgebaut, die eine Meinung schätzt, die nicht von einem Autohaus bezahlt wird. Mein persönliches Ziel ist der BMW M4 — und der Weg dahin hat mich gelehrt, wie der Automarkt wirklich funktioniert.
               </p>
               <p>
                 Was mich nervt: Autohäuser verdienen an deiner Unwissenheit. Sie verkaufen dir das Auto mit der höchsten Marge, nicht das, das am besten zu dir passt. Ich kenne die Tricks, die Preisverhandlungs-Spielchen und die typischen Schwachstellen der beliebtesten Modelle auf dem deutschen Markt — und ich teile das offen.
@@ -343,8 +533,8 @@ export default function App() {
             </div>
 
             {/* Social Proof Channels */}
-            <div className="bg-brand-light rounded-2xl p-6 border border-slate-100 space-y-4">
-              <h3 className="font-bold text-brand-blue text-sm tracking-wide uppercase">
+            <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-[#333333] space-y-4">
+              <h3 className="font-bold text-white text-sm tracking-wide uppercase">
                 Bekannt von TikTok:
               </h3>
               
@@ -354,7 +544,7 @@ export default function App() {
                   href="https://tiktok.com/@yotimoo1" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
+                  className="flex items-center gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group"
                   aria-label="Besuche Timo auf TikTok"
                 >
                   <div className="w-12 h-12 bg-slate-900 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
@@ -364,8 +554,8 @@ export default function App() {
                     </svg>
                   </div>
                   <div>
-                    <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">TikTok</p>
-                    <p className="text-xs text-slate-500">400k+ Follower</p>
+                    <p className="font-bold text-white group-hover:text-brand-orange transition-colors">TikTok</p>
+                    <p className="text-xs text-slate-400">400k+ Follower</p>
                   </div>
                 </a>
 
@@ -374,15 +564,15 @@ export default function App() {
                   href="https://instagram.com/yotimoo1" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
+                  className="flex items-center gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group"
                   aria-label="Besuche Timo auf Instagram"
                 >
                   <div className="w-12 h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
                     <Instagram className="w-6 h-6 stroke-[2]" />
                   </div>
                   <div>
-                    <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">Instagram</p>
-                    <p className="text-xs text-slate-500">@yotimoo1</p>
+                    <p className="font-bold text-white group-hover:text-brand-orange transition-colors">Instagram</p>
+                    <p className="text-xs text-slate-400">@yotimoo1</p>
                   </div>
                 </a>
 
@@ -391,15 +581,15 @@ export default function App() {
                   href="https://enricha.de/products/tiktok-anleitung-2025"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 group"
+                  className="flex items-center gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group"
                   aria-label="Timocar auf Enricha"
                 >
-                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-white border border-slate-100 flex items-center justify-center p-2">
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-[#1A1A1A] border border-[#333333] flex items-center justify-center p-2">
                     <img src="/enricha.png" alt="Enricha" className="w-full h-full object-contain" />
                   </div>
                   <div>
-                    <p className="font-bold text-brand-blue group-hover:text-brand-orange transition-colors">Enricha</p>
-                    <p className="text-xs text-slate-500">TikTok Kurs</p>
+                    <p className="font-bold text-white group-hover:text-brand-orange transition-colors">Enricha</p>
+                    <p className="text-xs text-slate-400">TikTok Kurs</p>
                   </div>
                 </a>
               </div>
@@ -408,11 +598,13 @@ export default function App() {
           </div>
         </div>
       </section>
-
-      {/* 3. CAR AI TOOL SECTION (PREMIUM DARK PANEL) */}
-      <section 
-        id="ai-tool" 
-        className="bg-brand-dark text-white rounded-3xl p-8 md:p-12 shadow-sm border border-white/5 relative overflow-hidden scroll-mt-6"
+        </>
+      ) : (
+        <>
+          {/* 3. CAR AI TOOL SECTION (PREMIUM DARK PANEL) */}
+          <section 
+            id="ai-tool" 
+            className="bg-brand-dark text-white rounded-3xl p-8 md:p-12 shadow-sm border border-white/5 relative overflow-hidden scroll-mt-6"
       >
         {/* Background ambient lighting */}
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-orange/5 rounded-full blur-3xl pointer-events-none" />
@@ -644,7 +836,7 @@ export default function App() {
           </div>
 
           {/* CTA Banner at the bottom of the section */}
-          <div className="mt-12 bg-gradient-to-r from-[#112a45] to-[#1a3a5c] rounded-3xl p-6 md:p-8 border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl max-w-4xl mx-auto">
+          <div className="mt-12 bg-gradient-to-r from-[#1E1E1E] to-[#111111] rounded-3xl p-6 md:p-8 border border-[#333333] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl max-w-4xl mx-auto">
             <div className="space-y-2 text-center md:text-left">
               <h3 className="text-xl md:text-2xl font-bold text-white font-display">
                 Brauchst du Hilfe bei der Auswahl?
@@ -655,7 +847,7 @@ export default function App() {
             </div>
             <a 
               href="#booking-section"
-              onClick={scrollToBooking}
+              onClick={(e) => scrollToSection("booking-section", e)}
               className="px-6 py-3.5 bg-brand-orange text-white text-sm font-bold rounded-xl shadow-lg shadow-brand-orange/20 hover:bg-[#e05621] transition-all duration-300 hover:scale-[1.03] shrink-0"
               aria-label="Zur Beratung scrollen"
             >
@@ -665,24 +857,28 @@ export default function App() {
 
         </div>
       </section>
+        </>
+      )}
 
-      {/* 4. PRODUCT / PURCHASE SECTION */}
-      <section 
-        id="booking-section" 
-        ref={bookingRef}
-        className="bg-white rounded-3xl border border-slate-100 p-8 md:p-12 shadow-sm scroll-mt-6"
-      >
+      {activeView === "home" && (
+        <>
+          {/* 4. PRODUCT / PURCHASE SECTION */}
+          <section 
+            id="booking-section" 
+            ref={bookingRef}
+            className="bg-brand-light/30 backdrop-blur rounded-3xl border border-[#333333] p-8 md:p-12 shadow-sm scroll-mt-6"
+          >
         <div className="w-full max-w-3xl mx-auto">
           
           <div className="text-center space-y-4 mb-10">
             <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Bestellformular</span>
-            <h2 className="font-display text-3xl md:text-4xl font-extrabold text-brand-blue">
+            <h2 className="font-display text-3xl md:text-4xl font-extrabold text-white">
               Auto-Beratung buchen
             </h2>
             <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto" />
             
-            <p className="text-slate-600 text-sm md:text-base max-w-xl mx-auto leading-relaxed font-medium">
-              Du füllst das Formular aus, ich recherchiere für dich den Markt. Du bekommst <strong className="text-brand-blue">3 konkrete Fahrzeug-Empfehlungen</strong> per E-Mail — inklusive Inserat-Links, Risiko-Check und dem, was ich dir als jemand der täglich Autos analysiert, ehrlich dazu sagen würde.
+            <p className="text-slate-400 text-sm md:text-base max-w-xl mx-auto leading-relaxed font-medium">
+              Du füllst das Formular aus, ich recherchiere für dich den Markt. Du bekommst <strong className="text-white">3 konkrete Fahrzeug-Empfehlungen</strong> per E-Mail — inklusive Inserat-Links, Risiko-Check und dem, was ich dir als jemand der täglich Autos analysiert, ehrlich dazu sagen würde.
             </p>
             
             <div className="inline-flex items-center gap-2 bg-brand-orange/10 border border-brand-orange/20 px-5 py-2.5 rounded-2xl text-brand-orange font-bold text-lg md:text-xl shadow-sm">
@@ -692,16 +888,16 @@ export default function App() {
           </div>
 
           {/* Booking / Purchase Form */}
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-lg overflow-hidden">
-            <div className="bg-brand-blue text-white p-5 px-6 md:px-8 flex items-center justify-between">
+          <div className="bg-brand-light rounded-3xl border border-[#333333] shadow-lg overflow-hidden">
+            <div className="bg-[#111111] border-b border-[#333333] text-white p-5 px-6 md:px-8 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <ShieldCheck className="w-6 h-6 text-brand-orange shrink-0 animate-pulse" />
                 <div>
                   <h3 className="font-bold text-sm md:text-base font-display">Sicherer Checkout</h3>
-                  <p className="text-xs text-slate-300">Deine Anfrage wird direkt bearbeitet</p>
+                  <p className="text-xs text-slate-400">Deine Anfrage wird direkt bearbeitet</p>
                 </div>
               </div>
-              <span className="text-xs text-brand-orange font-bold bg-white/10 px-2.5 py-1 rounded-md uppercase tracking-wider">
+              <span className="text-xs text-brand-orange font-bold bg-white/5 px-2.5 py-1 rounded-md uppercase tracking-wider">
                 100% DSGVO-Konform
               </span>
             </div>
@@ -709,39 +905,39 @@ export default function App() {
             {formSubmitted ? (
               // Success State
               <div className="p-8 md:p-12 text-center space-y-6 animate-fadeIn">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <div className="w-20 h-20 bg-emerald-950/40 text-emerald-500 border border-emerald-900 rounded-full flex items-center justify-center mx-auto shadow-inner">
                   <Check className="w-10 h-10 stroke-[3]" />
                 </div>
                 
                 <div className="space-y-2">
-                  <h4 className="text-2xl font-extrabold text-brand-blue font-display">Beratungsanfrage eingegangen!</h4>
-                  <p className="text-slate-600 max-w-md mx-auto text-sm leading-relaxed">
-                    Vielen Dank für deinen Auftrag! Wir haben deine Daten erfolgreich erhalten. Eine Bestätigung wurde an <strong className="text-brand-blue">{email}</strong> gesendet.
+                  <h4 className="text-2xl font-extrabold text-white font-display">Beratungsanfrage eingegangen!</h4>
+                  <p className="text-slate-350 max-w-md mx-auto text-sm leading-relaxed">
+                    Vielen Dank für deinen Auftrag! Wir haben deine Daten erfolgreich erhalten. Eine Bestätigung wurde an <strong className="text-white">{email}</strong> gesendet.
                   </p>
                 </div>
 
-                <div className="bg-brand-light rounded-2xl p-5 border border-slate-100 text-left text-sm space-y-3 max-w-lg mx-auto">
-                  <h5 className="font-bold text-brand-blue flex items-center gap-2 border-b border-slate-200/50 pb-2 text-xs uppercase tracking-wider">
+                <div className="bg-[#1A1A1A] rounded-2xl p-5 border border-[#333333] text-left text-sm space-y-3 max-w-lg mx-auto">
+                  <h5 className="font-bold text-white flex items-center gap-2 border-b border-[#333333] pb-2 text-xs uppercase tracking-wider">
                     <Sliders className="w-4 h-4 text-brand-orange" />
                     Übermittelte Kriterien:
                   </h5>
-                  <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-600 font-semibold">
-                    <div>Budget: <strong className="text-brand-blue">{budget ? `${budget} €` : "Nicht angegeben"}</strong></div>
-                    <div>Wunschmarke: <strong className="text-brand-blue">{brand || "Egal"}</strong></div>
-                    <div>Karosserie: <strong className="text-brand-blue">{bodyType}</strong></div>
-                    <div>Getriebe: <strong className="text-brand-blue">{transmission}</strong></div>
-                    <div>Antrieb: <strong className="text-brand-blue">{drive}</strong></div>
-                    <div>E-Mail: <strong className="text-brand-blue">{email}</strong></div>
+                  <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-300 font-semibold">
+                    <div>Budget: <strong className="text-white">{budget ? `${budget} €` : "Nicht angegeben"}</strong></div>
+                    <div>Wunschmarke: <strong className="text-white">{brand || "Egal"}</strong></div>
+                    <div>Karosserie: <strong className="text-white">{bodyType}</strong></div>
+                    <div>Getriebe: <strong className="text-white">{transmission}</strong></div>
+                    <div>Antrieb: <strong className="text-white">{drive}</strong></div>
+                    <div>E-Mail: <strong className="text-white">{email}</strong></div>
                   </div>
                   {notes && (
-                    <div className="border-t border-slate-200/50 pt-2 text-xs">
-                      <span className="font-semibold text-brand-blue block mb-1">Deine Notizen:</span>
-                      <p className="text-slate-500 italic">"{notes}"</p>
+                    <div className="border-t border-[#333333] pt-2 text-xs">
+                      <span className="font-semibold text-white block mb-1">Deine Notizen:</span>
+                      <p className="text-slate-400 italic">"{notes}"</p>
                     </div>
                   )}
                 </div>
 
-                <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+                <p className="text-xs text-slate-400 max-w-sm mx-auto font-medium">
                   Deine Anfrage wird nun von Timo persönlich geprüft und innerhalb der nächsten 48 Stunden per E-Mail an dich versendet.
                 </p>
 
@@ -749,7 +945,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleResetForm}
-                    className="px-6 py-2.5 bg-brand-blue text-white hover:bg-[#112a45] text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer"
+                    className="px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white border border-[#333333] text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer"
                   >
                     Neue Anfrage erstellen
                   </button>
@@ -763,7 +959,7 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Dein Budget */}
                   <div className="space-y-1.5">
-                    <label htmlFor="budget-input" className="block text-sm font-bold text-slate-700">
+                    <label htmlFor="budget-input" className="block text-sm font-bold text-slate-300">
                       Dein Budget (€)
                     </label>
                     <div className="relative">
@@ -773,16 +969,16 @@ export default function App() {
                         value={budget}
                         onChange={(e) => setBudget(e.target.value)}
                         placeholder="z. B. 25000"
-                        className="w-full px-4 py-3 bg-brand-light rounded-xl border border-slate-100 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-white transition-all duration-200 font-semibold"
+                        className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold text-sm"
                         aria-label="Dein Budget in Euro"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">€</span>
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">€</span>
                     </div>
                   </div>
 
                   {/* Gewünschte Automarke */}
                   <div className="space-y-1.5">
-                    <label htmlFor="brand-input" className="block text-sm font-bold text-slate-700">
+                    <label htmlFor="brand-input" className="block text-sm font-bold text-slate-300">
                       Gewünschte Automarke
                     </label>
                     <input 
@@ -791,7 +987,7 @@ export default function App() {
                       value={brand}
                       onChange={(e) => setBrand(e.target.value)}
                       placeholder="z. B. BMW, Audi oder Keine Präferenz"
-                      className="w-full px-4 py-3 bg-brand-light rounded-xl border border-slate-100 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-white transition-all duration-200 font-semibold"
+                      className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold text-sm"
                       aria-label="Gewünschte Automarke"
                     />
                   </div>
@@ -799,37 +995,37 @@ export default function App() {
 
                 {/* Bevorzugter Karosserietyp Select Dropdown */}
                 <div className="space-y-1.5">
-                  <label htmlFor="body-type" className="block text-sm font-bold text-slate-700">
+                  <label htmlFor="body-type" className="block text-sm font-bold text-slate-300">
                     Bevorzugter Karosserietyp
                   </label>
                   <select 
                     id="body-type"
                     value={bodyType}
                     onChange={(e) => setBodyType(e.target.value)}
-                    className="w-full px-4 py-3 bg-brand-light rounded-xl border border-slate-100 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-white transition-all duration-200 font-semibold cursor-pointer"
+                    className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold cursor-pointer text-sm"
                     aria-label="Bevorzugter Karosserietyp"
                   >
-                    <option value="Kleinwagen">Kleinwagen</option>
-                    <option value="Limousine">Limousine</option>
-                    <option value="SUV">SUV</option>
-                    <option value="Kombi">Kombi</option>
-                    <option value="Coupé">Coupé</option>
-                    <option value="Cabrio">Cabrio</option>
-                    <option value="Van">Van</option>
+                    <option value="Kleinwagen" className="bg-[#1A1A1A] text-white">Kleinwagen</option>
+                    <option value="Limousine" className="bg-[#1A1A1A] text-white">Limousine</option>
+                    <option value="SUV" className="bg-[#1A1A1A] text-white">SUV</option>
+                    <option value="Kombi" className="bg-[#1A1A1A] text-white">Kombi</option>
+                    <option value="Coupé" className="bg-[#1A1A1A] text-white">Coupé</option>
+                    <option value="Cabrio" className="bg-[#1A1A1A] text-white">Cabrio</option>
+                    <option value="Van" className="bg-[#1A1A1A] text-white">Van</option>
                   </select>
                 </div>
 
                 {/* Getriebe-Präferenz Radio Buttons */}
                 <div className="space-y-2">
-                  <span className="block text-sm font-bold text-slate-700">Getriebe-Präferenz</span>
+                  <span className="block text-sm font-bold text-slate-300">Getriebe-Präferenz</span>
                   <div className="grid grid-cols-3 gap-3">
                     {["Schaltgetriebe", "Automatik", "egal"].map((option) => (
                       <label 
                         key={option} 
                         className={`border rounded-xl p-3 flex items-center justify-center text-sm font-bold cursor-pointer transition-all duration-200 select-none ${
                           transmission === option 
-                            ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange" 
-                            : "border-slate-100 bg-brand-light text-slate-600 hover:bg-slate-50"
+                            ? "border-brand-orange bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange" 
+                            : "border-[#333333] bg-[#1A1A1A] text-slate-400 hover:bg-white/5 hover:text-white"
                         }`}
                       >
                         <input 
@@ -848,15 +1044,15 @@ export default function App() {
 
                 {/* Antrieb Radio Buttons */}
                 <div className="space-y-2">
-                  <span className="block text-sm font-bold text-slate-700">Antrieb</span>
+                  <span className="block text-sm font-bold text-slate-300">Antrieb</span>
                   <div className="grid grid-cols-4 gap-2 sm:gap-3">
                     {["Frontantrieb", "Heckantrieb", "Allrad", "egal"].map((option) => (
                       <label 
                         key={option} 
                         className={`border rounded-xl py-3 px-1 flex items-center justify-center text-xs sm:text-sm font-bold cursor-pointer transition-all duration-200 select-none ${
                           drive === option 
-                            ? "border-brand-orange bg-brand-orange/5 text-brand-orange ring-1 ring-brand-orange" 
-                            : "border-slate-100 bg-brand-light text-slate-600 hover:bg-slate-50"
+                            ? "border-brand-orange bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange" 
+                            : "border-[#333333] bg-[#1A1A1A] text-slate-400 hover:bg-white/5 hover:text-white"
                         }`}
                       >
                         <input 
@@ -875,7 +1071,7 @@ export default function App() {
 
                 {/* Weitere Wünsche / Anmerkungen Textarea */}
                 <div className="space-y-1.5">
-                  <label htmlFor="notes-textarea" className="block text-sm font-bold text-slate-700">
+                  <label htmlFor="notes-textarea" className="block text-sm font-bold text-slate-300">
                     Weitere Wünsche / Anmerkungen
                   </label>
                   <textarea 
@@ -884,18 +1080,18 @@ export default function App() {
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="z. B. Mindestens 4 Türen, Panoramadach, bevorzugte Farben, Nutzung primär für Langstrecken..."
                     rows={3}
-                    className="w-full px-4 py-3 bg-brand-light rounded-xl border border-slate-100 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-white transition-all duration-200 text-sm font-semibold"
+                    className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 text-sm font-semibold"
                     aria-label="Weitere Wünsche oder Anmerkungen"
                   />
                 </div>
 
                 {/* Deine E-Mail-Adresse */}
                 <div className="space-y-1.5">
-                  <label htmlFor="email-input" className="block text-sm font-bold text-slate-700">
+                  <label htmlFor="email-input" className="block text-sm font-bold text-slate-300">
                     Deine E-Mail-Adresse <span className="text-brand-orange">*</span>
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
                       <Mail className="w-5 h-5" />
                     </div>
                     <input 
@@ -905,21 +1101,21 @@ export default function App() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="deine.email@beispiel.de"
-                      className="w-full pl-11 pr-4 py-3 bg-brand-light rounded-xl border border-slate-100 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-white transition-all duration-200 font-semibold"
+                      className="w-full pl-11 pr-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold text-sm"
                       aria-label="Deine E-Mail-Adresse"
                     />
                   </div>
                 </div>
 
                 {/* Security and speed notice */}
-                <div className="flex items-center gap-2 text-xs text-slate-500 bg-brand-light p-3 rounded-xl border border-slate-100/50">
-                  <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="flex items-center gap-2 text-xs text-slate-400 bg-brand-light/50 p-3 rounded-xl border border-[#333333]">
+                  <Lock className="w-4 h-4 text-slate-500 shrink-0" />
                   <span className="font-semibold">Deine Daten werden ausschließlich verschlüsselt zur Erstellung der Fahrzeugempfehlung verarbeitet.</span>
                 </div>
 
                 {/* Checkout error banner */}
                 {checkoutError && (
-                  <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs">
+                  <div className="flex items-start gap-3 p-3 bg-red-950/20 border border-red-900/50 rounded-xl text-red-400 text-xs">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
                     <span className="font-semibold">{checkoutError}</span>
                   </div>
@@ -945,7 +1141,7 @@ export default function App() {
                       </>
                     )}
                   </button>
-                  <p className="text-center text-xs text-slate-500 mt-3 font-semibold">
+                  <p className="text-center text-xs text-slate-400 mt-3 font-semibold">
                     Du erhältst innerhalb von 48 Stunden 3 Auto-Vorschläge per E-Mail
                   </p>
                 </div>
@@ -960,17 +1156,17 @@ export default function App() {
       {/* 5. REVIEWS SECTION */}
       <section 
         id="reviews" 
-        className="py-20 bg-white"
+        className="py-20 bg-brand-dark"
       >
         <div className="w-full max-w-7xl mx-auto px-4">
           
           <div className="text-center space-y-4 max-w-xl mx-auto mb-16">
             <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Erfahrungsberichte</span>
-            <h2 className="font-display text-3xl md:text-4xl font-extrabold text-brand-blue">
+            <h2 className="font-display text-3xl md:text-4xl font-extrabold text-white">
               Kundenbewertungen
             </h2>
             <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto" />
-            <p className="text-slate-500 text-sm md:text-base">
+            <p className="text-slate-400 text-sm md:text-base">
               Leute aus der Community, die keinen Fehlkauf riskieren wollten — und es nicht bereut haben.
             </p>
           </div>
@@ -979,7 +1175,7 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             
             {/* Review 1 */}
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 hover:border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+            <div className="bg-brand-light/30 rounded-2xl p-6 border border-[#333333] hover:border-[#444444] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div className="space-y-4">
                 {/* 5 stars */}
                 <div className="flex text-amber-500">
@@ -991,20 +1187,20 @@ export default function App() {
                 </div>
                 
                 {/* Review Text */}
-                <p className="text-slate-600 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-brand-blue font-bold block not-italic mb-1">Endlich keine Angst mehr vor dem Kauf</span>
+                <p className="text-slate-300 text-sm md:text-base italic leading-relaxed">
+                  <span className="text-white font-bold block not-italic mb-1">Endlich keine Angst mehr vor dem Kauf</span>
                   "Ich hab Timo auf TikTok verfolgt und dann einfach mal die Beratung gebucht. Innerhalb von 24 Stunden hatte ich 3 konkrete Vorschläge mit allem was ich wissen muss. Bin jetzt glücklicher Besitzer eines VW Golf R — und hab dabei noch 1.500 Euro gespart."
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-200/50 flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-brand-blue text-sm">Mika S.</span>
+              <div className="mt-6 pt-4 border-t border-[#333333] flex justify-between items-center text-xs text-slate-500">
+                <span className="font-bold text-white text-sm">Mika S.</span>
                 <span>vor 2 Wochen</span>
               </div>
             </div>
 
             {/* Review 2 */}
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 hover:border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+            <div className="bg-brand-light/30 rounded-2xl p-6 border border-[#333333] hover:border-[#444444] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div className="space-y-4">
                 {/* 5 stars */}
                 <div className="flex text-amber-500">
@@ -1016,20 +1212,20 @@ export default function App() {
                 </div>
                 
                 {/* Review Text */}
-                <p className="text-slate-600 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-brand-blue font-bold block not-italic mb-1">Hat mir echt Nerven gespart</span>
+                <p className="text-slate-300 text-sm md:text-base italic leading-relaxed">
+                  <span className="text-white font-bold block not-italic mb-1">Hat mir echt Nerven gespart</span>
                   "Ich hatte null Plan welches Auto ich nehmen soll und wollte nicht einfach irgendwas kaufen. Die Empfehlung kam schnell, war super verständlich erklärt und Timo hat genau gewusst worauf ich achten muss. Jetzt fahre ich einen BMW 3er und bereue nichts."
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-200/50 flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-brand-blue text-sm">Lena K.</span>
+              <div className="mt-6 pt-4 border-t border-[#333333] flex justify-between items-center text-xs text-slate-500">
+                <span className="font-bold text-white text-sm">Lena K.</span>
                 <span>vor 1 Monat</span>
               </div>
             </div>
 
             {/* Review 3 */}
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 hover:border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+            <div className="bg-brand-light/30 rounded-2xl p-6 border border-[#333333] hover:border-[#444444] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div className="space-y-4">
                 {/* 5 stars */}
                 <div className="flex text-amber-500">
@@ -1041,14 +1237,14 @@ export default function App() {
                 </div>
                 
                 {/* Review Text */}
-                <p className="text-slate-600 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-brand-blue font-bold block not-italic mb-1">49€ die sich mehr als gelohnt haben</span>
+                <p className="text-slate-300 text-sm md:text-base italic leading-relaxed">
+                  <span className="text-white font-bold block not-italic mb-1">49€ die sich mehr als gelohnt haben</span>
                   "Timos TikToks kenn ich schon lange, aber die Beratung hat nochmal einen draufgesetzt. Er hat mir direkt gesagt welches der drei Autos er selbst nehmen würde und warum. Das ist genau das was man braucht wenn man unsicher ist. Absolute Empfehlung!"
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-200/50 flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-brand-blue text-sm">Jonas W.</span>
+              <div className="mt-6 pt-4 border-t border-[#333333] flex justify-between items-center text-xs text-slate-500">
+                <span className="font-bold text-white text-sm">Jonas W.</span>
                 <span>vor 3 Wochen</span>
               </div>
             </div>
@@ -1057,13 +1253,13 @@ export default function App() {
 
           {/* Rating Summary Block */}
           <div className="mt-12 text-center">
-            <div className="inline-flex flex-col sm:flex-row items-center justify-center gap-3 bg-slate-50 border border-slate-200 rounded-3xl p-4 px-6 md:px-8 shadow-sm">
+            <div className="inline-flex flex-col sm:flex-row items-center justify-center gap-3 bg-brand-light/30 border border-[#333333] rounded-3xl p-4 px-6 md:px-8 shadow-sm">
               <div className="flex items-center gap-1.5 text-amber-500 font-bold text-lg">
                 <Star className="w-5 h-5 fill-current" />
                 <span>4.8 / 5</span>
               </div>
-              <div className="hidden sm:block w-px h-6 bg-slate-300" />
-              <div className="text-sm font-semibold text-brand-blue">
+              <div className="hidden sm:block w-px h-6 bg-[#333333]" />
+              <div className="text-sm font-semibold text-white">
                 Gesamtbewertung basierend auf 148 Kundenrezensionen in Deutschland
               </div>
             </div>
@@ -1071,6 +1267,9 @@ export default function App() {
 
         </div>
       </section>
+        </>
+      )}
+        </main>
 
       {/* 6. FOOTER (minimal) */}
       <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-900 mt-auto">
@@ -1115,15 +1314,17 @@ export default function App() {
           </nav>
         </div>
       </footer>
+      
+      </div>
 
       {/* INTERACTIVE LEGAL MODAL COMPONENT (Provides professional details on click) */}
       {activeModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative">
+          <div className="bg-[#262626] rounded-3xl border border-[#333333] max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative">
             
             {/* Sticky Header */}
-            <div className="sticky top-0 bg-white border-b border-slate-100 p-5 px-6 flex items-center justify-between z-10">
-              <h4 className="text-xl font-bold text-brand-blue uppercase tracking-wide">
+            <div className="sticky top-0 bg-[#111111] border-b border-[#333333] p-5 px-6 flex items-center justify-between z-10">
+              <h4 className="text-xl font-bold text-white uppercase tracking-wide">
                 {activeModal === "impressum" && "Impressum"}
                 {activeModal === "widerruf" && "Widerrufsbelehrung"}
                 {activeModal === "agb" && "Allgemeine Geschäftsbedingungen (AGB)"}
@@ -1131,7 +1332,7 @@ export default function App() {
               </h4>
               <button 
                 onClick={() => setActiveModal(null)}
-                className="p-1.5 hover:bg-slate-100 rounded-full text-slate-500 hover:text-slate-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                className="p-1.5 hover:bg-white/5 rounded-full text-slate-400 hover:text-white transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-orange"
                 aria-label="Schließen"
               >
                 <X className="w-5 h-5 stroke-[2.5]" />
@@ -1139,84 +1340,84 @@ export default function App() {
             </div>
 
             {/* Modal Body Content (German placeholder legal texts) */}
-            <div className="p-6 px-8 text-sm text-slate-600 space-y-4 leading-relaxed">
+            <div className="p-6 px-8 text-sm text-slate-300 space-y-4 leading-relaxed">
               
               {activeModal === "impressum" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-brand-blue text-base">Angaben gemäß § 5 TMG:</p>
+                  <p className="font-bold text-white text-base">Angaben gemäß § 5 TMG:</p>
                   <p>
                     YoTimo Auto-Beratung<br />
                     {/* TODO: Echte Adresse hier eintragen */}
                     [Straße und Hausnummer]<br />
                     [PLZ und Stadt]
                   </p>
-                  <p className="font-semibold text-brand-blue">Kontakt:</p>
+                  <p className="font-semibold text-white">Kontakt:</p>
                   <p>
                     {/* TODO: Echte Kontaktdaten eintragen */}
                     Telefon: [Telefonnummer]<br />
                     E-Mail: [kontakt@email.de]
                   </p>
-                  <p className="font-semibold text-brand-blue">Umsatzsteuer-ID:</p>
+                  <p className="font-semibold text-white">Umsatzsteuer-ID:</p>
                   <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz: [USt-ID]</p>
-                  <p className="font-semibold text-brand-blue">Berufsbezeichnung &amp; Berufsregeln:</p>
+                  <p className="font-semibold text-white">Berufsbezeichnung &amp; Berufsregeln:</p>
                   <p>Gewerbeanmeldung nach § 14 GewO erteilt durch die zuständige Gemeinde.</p>
-                  <p className="font-semibold text-brand-blue">Redaktionell verantwortlich:</p>
+                  <p className="font-semibold text-white">Redaktionell verantwortlich:</p>
                   <p>Timo (Anschrift wie oben)</p>
-                  <p className="font-semibold text-brand-blue">Streitschlichtung:</p>
+                  <p className="font-semibold text-white">Streitschlichtung:</p>
                   <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://ec.europa.eu/consumers/odr</a>. Zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle sind wir nicht verpflichtet und nicht bereit.</p>
                 </div>
               )}
 
               {activeModal === "widerruf" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-brand-blue text-base">Widerrufsbelehrung</p>
-                  <p className="font-semibold text-brand-blue">Widerrufsrecht</p>
+                  <p className="font-bold text-white text-base">Widerrufsbelehrung</p>
+                  <p className="font-semibold text-white">Widerrufsrecht</p>
                   <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
                   <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, [Adresse], E-Mail: [kontakt@email.de]) mittels einer eindeutigen Erklärung (z.B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
                   
-                  <p className="font-semibold text-brand-blue">Vorzeitiges Erlöschen des Widerrufsrechts</p>
-                  <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 italic text-xs">
+                  <p className="font-semibold text-white">Vorzeitiges Erlöschen des Widerrufsrechts</p>
+                  <p className="bg-[#1A1A1A] p-3 rounded-lg border border-[#333333] italic text-xs text-slate-450">
                     Besonderer Hinweis: Das Widerrufsrecht erlischt vorzeitig bei einem Vertrag zur Erbringung von Dienstleistungen, wenn wir die Dienstleistung vollständig erbracht haben und mit der Ausführung der Dienstleistung erst begonnen haben, nachdem Sie dazu Ihre ausdrückliche Zustimmung gegeben haben und gleichzeitig Ihre Kenntnis davon bestätigt haben, dass Sie Ihr Widerrufsrecht bei vollständiger Vertragserfüllung durch uns verlieren. Da es sich hier um eine digitale Express-Dienstleistung innerhalb von 48 Stunden handelt, stimmen Sie dieser Ausführung bei Bestellung ausdrücklich zu.
                   </p>
 
-                  <p className="font-semibold text-brand-blue">Folgen des Widerrufs</p>
+                  <p className="font-semibold text-white">Folgen des Widerrufs</p>
                   <p>Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von Ihnen erhalten haben, unverzüglich und spätestens binnen vierzehn Tagen ab dem Tag zurückzuzahlen, an dem die Mitteilung über Ihren Widerruf dieses Vertrags bei uns eingegangen ist. Für diese Rückzahlung verwenden wir dasselbe Zahlungsmittel, das Sie bei der ursprünglichen Transaktion eingesetzt haben.</p>
                 </div>
               )}
 
               {activeModal === "agb" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-brand-blue text-base">Allgemeine Geschäftsbedingungen (AGB)</p>
-                  <p className="font-semibold text-brand-blue">§ 1 Geltungsbereich und Vertragspartner</p>
+                  <p className="font-bold text-white text-base">Allgemeine Geschäftsbedingungen (AGB)</p>
+                  <p className="font-semibold text-white">§ 1 Geltungsbereich und Vertragspartner</p>
                   <p>Diese AGB gelten für alle Dienstleistungen zwischen YoTimo Auto-Beratung (nachfolgend „Dienstleister“) und dem Kunden. Vertragspartner ist ausschließlich Timo.</p>
                   
-                  <p className="font-semibold text-brand-blue">§ 2 Vertragsgegenstand &amp; Leistungsumfang</p>
+                  <p className="font-semibold text-white">§ 2 Vertragsgegenstand &amp; Leistungsumfang</p>
                   <p>Gegenstand des Vertrages ist die herstellerunabhängige Kaufberatung für Kraftfahrzeuge. Der Dienstleister erstellt ein personalisiertes PDF-Dossier mit 3 Fahrzeugvorschlägen auf Basis der vom Kunden übermittelten Angaben. Es handelt sich um ein Dienstleistungsverhältnis, nicht um eine Vermittlung oder Gewährleistung für den tatsächlichen Kaufzustand eines empfohlenen Fahrzeugs.</p>
                   
-                  <p className="font-semibold text-brand-blue">§ 3 Zahlungsbedingungen &amp; Preise</p>
+                  <p className="font-semibold text-white">§ 3 Zahlungsbedingungen &amp; Preise</p>
                   <p>Die angegebenen Preise verstehen sich als Endpreise inklusive der gesetzlichen deutschen Umsatzsteuer. Der Betrag in Höhe von 49 € ist unmittelbar bei Buchung über die bereitgestellten Zahlungsmethoden fällig.</p>
 
-                  <p className="font-semibold text-brand-blue">§ 4 Lieferung &amp; Leistungszeit</p>
+                  <p className="font-semibold text-white">§ 4 Lieferung &amp; Leistungszeit</p>
                   <p>Die Erstellung und Übersendung der 3 Auto-Vorschläge erfolgt innerhalb von 48 Stunden ab Zahlungseingang und vollständiger Datenübermittlung per E-Mail im PDF-Format.</p>
 
-                  <p className="font-semibold text-brand-blue">§ 5 Haftungsausschluss</p>
+                  <p className="font-semibold text-white">§ 5 Haftungsausschluss</p>
                   <p>Der Dienstleister haftet nicht für Mängel an Fahrzeugen, die der Kunde im Nachgang erwirbt. Alle Empfehlungen stellen unverbindliche subjektive Fachmeinungen dar. Eine physische Begutachtung des Fahrzeugs durch einen zertifizierten Gutachter vor Ort vor Kaufabschluss wird dringend empfohlen.</p>
                 </div>
               )}
 
               {activeModal === "datenschutz" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-brand-blue text-base">Datenschutzerklärung gemäß DSGVO</p>
-                  <p className="font-semibold text-brand-blue">1. Datenschutz auf einen Blick</p>
+                  <p className="font-bold text-white text-base">Datenschutzerklärung gemäß DSGVO</p>
+                  <p className="font-semibold text-white">1. Datenschutz auf einen Blick</p>
                   <p>Wir nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Personenbezogene Daten werden auf dieser Webseite nur im technisch und organisatorisch notwendigen Umfang verarbeitet (z.B. zur Bereitstellung der Beratung).</p>
                   
-                  <p className="font-semibold text-brand-blue">2. Datenerhebung bei Auftragsstellung</p>
+                  <p className="font-semibold text-white">2. Datenerhebung bei Auftragsstellung</p>
                   <p>Wenn Sie eine Beratung anfordern, erheben wir die von Ihnen eingegebenen Daten (Budget, Wunschmarke, Karosserietyp, Getriebeart, Antrieb und Ihre E-Mail-Adresse). Diese Daten werden ausschließlich zur Bearbeitung und Zusendung Ihrer Kaufempfehlungen verwendet und nicht an unbefugte Dritte weitergegeben.</p>
 
-                  <p className="font-semibold text-brand-blue">3. Ihre Rechte (Auskunft, Löschung, Sperrung)</p>
+                  <p className="font-semibold text-white">3. Ihre Rechte (Auskunft, Löschung, Sperrung)</p>
                   <p>Sie haben jederzeit das Recht auf unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und Empfänger und den Zweck der Datenverarbeitung sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Schreiben Sie uns dazu einfach eine E-Mail an: [datenschutz@email.de]</p>
 
-                  <p className="font-semibold text-brand-blue">4. Datensicherheit</p>
+                  <p className="font-semibold text-white">4. Datensicherheit</p>
                   <p>Ihre Daten werden über eine verschlüsselte SSL-Verbindung (HTTPS) übertragen, um unberechtigte Zugriffe Dritter bestmöglich zu verhindern.</p>
                 </div>
               )}
@@ -1224,10 +1425,10 @@ export default function App() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-5 px-6 border-t border-slate-100 flex justify-end">
+            <div className="p-5 px-6 border-t border-[#333333] flex justify-end">
               <button 
                 onClick={() => setActiveModal(null)}
-                className="px-5 py-2.5 bg-brand-blue hover:bg-slate-700 text-white font-bold rounded-xl transition-all duration-200 cursor-pointer"
+                className="px-5 py-2.5 bg-brand-orange hover:bg-[#e05621] text-white font-bold rounded-xl transition-all duration-200 cursor-pointer"
               >
                 Schließen
               </button>
