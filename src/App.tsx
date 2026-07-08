@@ -366,12 +366,6 @@ export default function App() {
                 </>
               )}
             </div>
-
-            {/* Right: status indicator */}
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Status: Online</span>
-            </div>
           </div>
         </header>
 
