@@ -173,15 +173,15 @@ export default function App() {
     <div className="flex min-h-screen bg-brand-dark font-sans text-slate-300">
       {/* Sidebar - Desktop */}
       <aside className="hidden lg:flex flex-col w-72 bg-[#111111] border-r border-[#333333] shrink-0 fixed inset-y-0 left-0 z-20">
-        <div className="p-6 border-b border-[#333333] flex items-center gap-3">
-          <div className="p-2.5 bg-brand-orange/10 rounded-xl text-brand-orange">
-            <Car className="w-6 h-6" />
+        <div className="h-20 px-6 border-b border-[#333333] flex items-center gap-3 shrink-0">
+          <div className="p-2 bg-brand-orange/10 rounded-xl text-brand-orange">
+            <Car className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-display font-extrabold text-white text-lg tracking-tight leading-none uppercase">
+            <h1 className="font-display font-extrabold text-white text-base tracking-tight leading-none uppercase">
               Timo's
             </h1>
-            <span className="text-[10px] text-brand-orange font-bold tracking-widest uppercase">
+            <span className="text-[9px] text-brand-orange font-bold tracking-widest uppercase block mt-0.5">
               Auto-Beratung
             </span>
           </div>
@@ -346,20 +346,56 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-grow flex flex-col lg:pl-72 pt-16 lg:pt-0 min-h-screen bg-brand-dark overflow-x-hidden">
+        
+        {/* Desktop Top Bar */}
+        <header className="hidden lg:block border-b border-[#333333] sticky top-0 bg-brand-dark/80 backdrop-blur-md z-20 w-full">
+          <div className="max-w-7xl mx-auto w-full h-20 px-8 lg:px-12 flex items-center justify-between">
+            {/* Left: breadcrumbs / navigation indicator */}
+            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {activeView === "home" ? (
+                <span className="text-slate-400">Startseite</span>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => setActiveView("home")} 
+                    className="hover:text-brand-orange transition-colors cursor-pointer"
+                  >
+                    Startseite
+                  </button>
+                  <span className="text-slate-600">/</span>
+                  <span className="text-brand-orange">KI-Fahrzeugsuche</span>
+                </>
+              )}
+            </div>
+
+            {/* Right: status indicator */}
+            <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/5 border border-emerald-500/10 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
+                Online-Beratung aktiv
+              </span>
+            </div>
+          </div>
+        </header>
+
         <main className="flex-grow p-4 md:p-8 lg:p-12 max-w-7xl mx-auto w-full space-y-12">
           {activeView === "home" ? (
             <>
               {/* 1. HERO SECTION */}
               <section 
                 id="home" 
-                className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:py-24 bg-brand-dark"
+                className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:pt-8 lg:pb-20 bg-brand-dark overflow-hidden"
               >
-                <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+                {/* Background ambient lighting */}
+                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand-orange/5 rounded-full blur-3xl pointer-events-none -z-10" />
+                <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
+                
+                <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center relative z-10">
           
           {/* Left Column: Headline and Subheading */}
           <div className="lg:col-span-7 space-y-6 md:space-y-8 text-center lg:text-left relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-orange/10 rounded-full text-brand-orange text-sm font-semibold tracking-wide">
-              <Sparkles className="w-4 h-4" />
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-brand-orange/5 border border-brand-orange/15 rounded-full text-brand-orange text-xs font-bold uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
               <span>Herstellerunabhängige Beratung</span>
             </div>
             
