@@ -4,35 +4,31 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
-import { 
-  Car, 
-  ShieldCheck, 
-  Star, 
-  Award, 
-  Instagram, 
-  Search, 
-  Sparkles, 
-  ChevronDown, 
-  ChevronUp, 
-  Gauge, 
-  Fuel, 
-  TrendingDown, 
-  AlertTriangle, 
-  Check, 
-  ArrowRight, 
-  Loader2, 
-  X, 
-  Lock, 
+import {
+  Car,
+  ShieldCheck,
+  Star,
+  Award,
+  Instagram,
+  Search,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Gauge,
+  Fuel,
+  TrendingDown,
+  AlertTriangle,
+  Check,
+  ArrowRight,
+  Loader2,
+  X,
+  Lock,
   Mail,
   Sliders,
   CheckCircle,
   Menu,
-  Home,
-  Calendar
 } from "lucide-react";
 
-// CarDetail shape — wird sowohl vom Gemini-Backend (/api/analyze-car) als auch vom Frontend genutzt.
-// Server ist die Single Source of Truth, kein Frontend-Mock nötig.
 interface CarDetail {
   name: string;
   leistung: string;
@@ -43,14 +39,12 @@ interface CarDetail {
 }
 
 export default function App() {
-  // AI Tool State
   const [carQuery, setCarQuery] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzedCar, setAnalyzedCar] = useState<CarDetail | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
-  
-  // Booking Form State
+
   const [budget, setBudget] = useState("");
   const [brand, setBrand] = useState("");
   const [bodyType, setBodyType] = useState("Limousine");
@@ -58,80 +52,62 @@ export default function App() {
   const [drive, setDrive] = useState("egal");
   const [notes, setNotes] = useState("");
   const [email, setEmail] = useState("");
-  // Check for successful Stripe redirect on mount
   const [formSubmitted, setFormSubmitted] = useState(
     () => new URLSearchParams(window.location.search).get("payment") === "success"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  // Legal Modal States
   const [activeModal, setActiveModal] = useState<string | null>(null);
-
-  // Navigation View State
   const [activeView, setActiveView] = useState<"home" | "ai-tool">("home");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Keep track of active section for scroll-spy / navigation highlighting
+  const [navScrolled, setNavScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("home");
 
-  useEffect(() => {
-    if (activeView !== "home") {
-      setActiveSection("ai-tool");
-      return;
-    }
+  const bookingRef = useRef<HTMLElement | null>(null);
 
-    const handleScroll = () => {
+  useEffect(() => {
+    const handler = () => setNavScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", handler, { passive: true });
+    return () => window.removeEventListener("scroll", handler);
+  }, []);
+
+  useEffect(() => {
+    if (activeView !== "home") { setActiveSection("ai-tool"); return; }
+    const handler = () => {
       const bookingEl = document.getElementById("booking-section");
       const reviewsEl = document.getElementById("reviews");
-
-      const scrollPosition = window.scrollY + window.innerHeight / 3;
-
-      if (reviewsEl && scrollPosition >= reviewsEl.offsetTop) {
-        setActiveSection("reviews");
-      } else if (bookingEl && scrollPosition >= bookingEl.offsetTop) {
-        setActiveSection("booking-section");
-      } else {
-        setActiveSection("home");
-      }
+      const sp = window.scrollY + window.innerHeight / 3;
+      if (reviewsEl && sp >= reviewsEl.offsetTop) setActiveSection("reviews");
+      else if (bookingEl && sp >= bookingEl.offsetTop) setActiveSection("booking-section");
+      else setActiveSection("home");
     };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    // Run once on mount / view change
-    handleScroll();
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
+    window.addEventListener("scroll", handler, { passive: true });
+    handler();
+    return () => window.removeEventListener("scroll", handler);
   }, [activeView]);
 
-  // References for smooth scrolling
-  const bookingRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setActiveModal(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const scrollToSection = (id: string, e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     setIsMobileMenuOpen(false);
     if (activeView !== "home") {
       setActiveView("home");
-      setTimeout(() => {
-        const el = document.getElementById(id);
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+      setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 100);
     } else {
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: "smooth" });
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     }
   };
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!carQuery.trim()) return;
-
-    setIsAnalyzing(true);
-    setAnalyzedCar(null);
-    setAnalyzeError(null);
-    setShowAllDetails(false);
-
+    setIsAnalyzing(true); setAnalyzedCar(null); setAnalyzeError(null); setShowAllDetails(false);
     try {
       const res = await fetch("/api/analyze-car", {
         method: "POST",
@@ -139,25 +115,31 @@ export default function App() {
         body: JSON.stringify({ query: carQuery.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setAnalyzeError(data.error ?? "Unbekannter Fehler beim Analysieren.");
-      } else {
-        setAnalyzedCar(data as CarDetail);
-      }
-    } catch {
-      setAnalyzeError("Verbindung zum Server fehlgeschlagen. Bitte versuche es später erneut.");
-    } finally {
-      setIsAnalyzing(false);
-    }
+      if (!res.ok) setAnalyzeError(data.error ?? "Unbekannter Fehler.");
+      else setAnalyzedCar(data as CarDetail);
+    } catch { setAnalyzeError("Verbindung zum Server fehlgeschlagen."); }
+    finally { setIsAnalyzing(false); }
+  };
+
+  const runQuickAnalyze = async (quickCar: string) => {
+    setCarQuery(quickCar); setIsAnalyzing(true); setAnalyzedCar(null); setAnalyzeError(null); setShowAllDetails(false);
+    try {
+      const res = await fetch("/api/analyze-car", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: quickCar }),
+      });
+      const data = await res.json();
+      if (!res.ok) setAnalyzeError(data.error ?? "Fehler");
+      else setAnalyzedCar(data as CarDetail);
+    } catch { setAnalyzeError("Verbindung fehlgeschlagen."); }
+    finally { setIsAnalyzing(false); }
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
-
-    setIsSubmitting(true);
-    setCheckoutError(null);
-
+    setIsSubmitting(true); setCheckoutError(null);
     try {
       const res = await fetch("/api/create-checkout", {
         method: "POST",
@@ -165,1308 +147,640 @@ export default function App() {
         body: JSON.stringify({ budget, brand, bodyType, transmission, drive, notes, email }),
       });
       const data = await res.json();
-      if (!res.ok || !data.url) {
-        setCheckoutError(data.error ?? "Checkout konnte nicht gestartet werden.");
-        setIsSubmitting(false);
-        return;
-      }
-      // Redirect to Stripe Hosted Checkout
+      if (!res.ok || !data.url) { setCheckoutError(data.error ?? "Checkout konnte nicht gestartet werden."); setIsSubmitting(false); return; }
       window.location.href = data.url;
-    } catch {
-      setCheckoutError("Verbindung zum Server fehlgeschlagen. Bitte versuche es erneut.");
-      setIsSubmitting(false);
-    }
+    } catch { setCheckoutError("Verbindung fehlgeschlagen."); setIsSubmitting(false); }
   };
 
   const handleResetForm = () => {
-    setBudget("");
-    setBrand("");
-    setBodyType("Limousine");
-    setTransmission("egal");
-    setDrive("egal");
-    setNotes("");
-    setEmail("");
-    setFormSubmitted(false);
+    setBudget(""); setBrand(""); setBodyType("Limousine"); setTransmission("egal");
+    setDrive("egal"); setNotes(""); setEmail(""); setFormSubmitted(false);
   };
 
-  // Close modal when pressing escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setActiveModal(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const navLinks: { label: string; section: string; action: (e?: React.MouseEvent) => void }[] = [
+    { label: "Startseite", section: "home", action: () => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); } },
+    { label: "KI-Fahrzeugsuche", section: "ai-tool", action: () => { setActiveView("ai-tool"); window.scrollTo({ top: 0, behavior: "smooth" }); } },
+    { label: "Beratung", section: "booking-section", action: (e) => scrollToSection("booking-section", e) },
+    { label: "Bewertungen", section: "reviews", action: (e) => scrollToSection("reviews", e) },
+  ];
 
   return (
-    <div className="flex min-h-screen bg-brand-dark font-sans text-slate-300">
-      {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex flex-col w-72 bg-[#111111] border-r border-[#333333] shrink-0 fixed inset-y-0 left-0 z-20">
-        <div className="h-20 px-6 border-b border-[#333333] flex items-center gap-3 shrink-0">
-          <div className="p-2 bg-brand-orange/10 rounded-xl text-brand-orange">
-            <Car className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="font-display font-extrabold text-white text-base tracking-tight leading-none uppercase">
-              Timo's
-            </h1>
-            <span className="text-[9px] text-brand-orange font-bold tracking-widest uppercase block mt-0.5">
-              Auto-Beratung
-            </span>
-          </div>
+    <div className="flex flex-col min-h-screen bg-[#0D0D0D] font-sans text-zinc-400">
+
+      {/* ─── TOP NAV ─── */}
+      <header className={`fixed top-0 left-0 right-0 z-30 h-16 transition-all duration-300 ${navScrolled ? "bg-[#0D0D0D]/95 backdrop-blur-md border-b border-[#1A1A1A]" : "bg-transparent"}`}>
+        <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12 h-full flex items-center justify-between">
+
+          <button onClick={() => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex items-center gap-2.5 cursor-pointer group">
+            <div className="w-8 h-8 bg-brand-orange rounded-md flex items-center justify-center group-hover:bg-[#e05621] transition-colors shrink-0">
+              <Car className="w-4 h-4 text-white" />
+            </div>
+            <div className="leading-none">
+              <span className="font-display font-black text-white text-sm tracking-tight uppercase block">Timo's</span>
+              <span className="text-brand-orange text-[9px] font-bold tracking-[0.2em] uppercase block">Auto-Beratung</span>
+            </div>
+          </button>
+
+          <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold">
+            {navLinks.map(({ label, action, section }) => (
+              <button key={label} onClick={() => action()} className={`transition-colors cursor-pointer ${activeSection === section ? "text-white" : "text-zinc-500 hover:text-white"}`}>
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          <button onClick={(e) => scrollToSection("booking-section", e)} className="hidden lg:inline-flex items-center gap-2 px-4 py-2 bg-brand-orange text-white text-sm font-bold rounded-lg hover:bg-[#e05621] transition-colors cursor-pointer">
+            49 € buchen <ArrowRight className="w-4 h-4" />
+          </button>
+
+          <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-1.5 text-zinc-400 hover:text-white transition-colors cursor-pointer" aria-label="Menü öffnen">
+            <Menu className="w-6 h-6" />
+          </button>
         </div>
-
-        <nav className="flex-grow p-4 space-y-1.5 overflow-y-auto">
-          <button
-            onClick={() => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-              activeSection === "home"
-                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                : "text-slate-400 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            <Home className="w-5 h-5" />
-            <span>Startseite</span>
-          </button>
-
-          <button
-            onClick={() => { setActiveView("ai-tool"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-              activeSection === "ai-tool"
-                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                : "text-slate-400 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            <Search className="w-5 h-5" />
-            <span>KI-Fahrzeugsuche</span>
-          </button>
-
-          <button
-            onClick={(e) => scrollToSection("booking-section", e)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-              activeSection === "booking-section"
-                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                : "text-slate-400 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            <Calendar className="w-5 h-5" />
-            <span>Beratung buchen</span>
-          </button>
-
-          <button
-            onClick={(e) => scrollToSection("reviews", e)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-              activeSection === "reviews"
-                ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                : "text-slate-400 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            <Star className="w-5 h-5" />
-            <span>Bewertungen</span>
-          </button>
-        </nav>
-
-        {/* Sidebar Footer */}
-        <div className="p-4 border-t border-[#333333] space-y-3">
-          <div className="text-[10px] text-slate-500 font-medium px-2">
-            © 2026 YoTimo Auto-Beratung
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1.5 px-2 text-[10px] font-semibold text-slate-400">
-            <button onClick={() => setActiveModal("impressum")} className="hover:text-brand-orange cursor-pointer">Impressum</button>
-            <button onClick={() => setActiveModal("widerruf")} className="hover:text-brand-orange cursor-pointer">Widerruf</button>
-            <button onClick={() => setActiveModal("agb")} className="hover:text-brand-orange cursor-pointer">AGB</button>
-            <button onClick={() => setActiveModal("datenschutz")} className="hover:text-brand-orange cursor-pointer">Datenschutz</button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile Top Navigation Bar */}
-      <header className="lg:hidden flex items-center justify-between px-6 py-4 bg-[#111111] border-b border-[#333333] fixed top-0 left-0 right-0 z-30 h-16">
-        <div className="flex items-center gap-2">
-          <Car className="w-5 h-5 text-brand-orange" />
-          <span className="font-display font-extrabold text-white text-base tracking-tight uppercase">
-            Timo's Auto-Beratung
-          </span>
-        </div>
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-1.5 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer focus:outline-none"
-          aria-label="Menü öffnen"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
       </header>
 
-      {/* Mobile Sidebar / Drawer */}
+      {/* ─── MOBILE DRAWER ─── */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 flex">
-          {/* Overlay */}
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300" 
-            onClick={() => setIsMobileMenuOpen(false)} 
-          />
-          {/* Menu Panel */}
-          <aside className="relative flex flex-col w-72 max-w-xs bg-[#111111] border-r border-[#333333] h-full z-50 p-6 shadow-2xl flex-shrink-0">
-            <div className="flex items-center justify-between pb-6 border-b border-[#333333] mb-6">
-              <div className="flex items-center gap-2.5">
-                <Car className="w-5 h-5 text-brand-orange" />
-                <span className="font-display font-extrabold text-white text-base tracking-tight uppercase">
-                  Timo's
-                </span>
+        <div className="lg:hidden fixed inset-0 z-40 bg-[#0D0D0D] flex flex-col">
+          <div className="flex items-center justify-between px-6 h-16 border-b border-[#1A1A1A] shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-brand-orange rounded-md flex items-center justify-center"><Car className="w-4 h-4 text-white" /></div>
+              <span className="font-display font-black text-white text-sm tracking-tight uppercase">Timo's Auto-Beratung</span>
+            </div>
+            <button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 text-zinc-400 hover:text-white cursor-pointer" aria-label="Schließen"><X className="w-6 h-6" /></button>
+          </div>
+          <nav className="flex flex-col flex-grow px-6 pt-4 overflow-y-auto">
+            {navLinks.map(({ label, action }) => (
+              <button key={label} onClick={() => { action(); setIsMobileMenuOpen(false); }} className="w-full text-left py-5 text-2xl font-black text-white border-b border-[#1A1A1A] hover:text-brand-orange transition-colors cursor-pointer last:border-0">
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="p-6 border-t border-[#1A1A1A] shrink-0">
+            <button onClick={(e) => { scrollToSection("booking-section", e); setIsMobileMenuOpen(false); }} className="w-full py-4 bg-brand-orange text-white text-base font-bold rounded-lg hover:bg-[#e05621] transition-colors flex items-center justify-center gap-2 cursor-pointer">
+              49 € Beratung buchen <ArrowRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MAIN ─── */}
+      <main className="flex-grow pt-16">
+
+        {activeView === "home" ? (
+          <>
+            {/* ── HERO ── */}
+            <section id="home" className="min-h-[calc(100vh-64px)] flex flex-col hero-dot-grid">
+              <div className="flex-grow max-w-7xl mx-auto w-full px-6 md:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center py-20 md:py-28">
+
+                {/* Headline */}
+                <div className="lg:col-span-7 space-y-8">
+                  <p className="text-[10px] font-bold text-brand-orange uppercase tracking-[0.35em]">Herstellerunabhängige Beratung</p>
+
+                  <h1 className="font-display font-black leading-[0.88] tracking-tight">
+                    <span className="block text-6xl md:text-7xl lg:text-[84px] text-white">Finde dein</span>
+                    <span className="block text-6xl md:text-7xl lg:text-[84px] text-stroke-orange">PERFEKTES</span>
+                    <span className="block text-6xl md:text-7xl lg:text-[84px] text-white">Auto.</span>
+                  </h1>
+
+                  <p className="text-zinc-400 text-base md:text-lg leading-relaxed max-w-lg">
+                    Du weißt nicht welches Auto zu dir passt — oder willst keinen Fehlkauf riskieren? Kein Bullshit, kein Autohaus-Druck. Nur eine ehrliche Empfehlung von jemandem, der täglich Autos analysiert.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                    <button onClick={(e) => scrollToSection("booking-section", e)} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-brand-orange text-white text-sm font-bold rounded-lg hover:bg-[#e05621] transition-colors cursor-pointer">
+                      Beratung für 49 € buchen <ArrowRight className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => { setActiveView("ai-tool"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 border border-[#2A2A2A] text-zinc-300 text-sm font-bold rounded-lg hover:border-[#444444] hover:text-white transition-colors cursor-pointer">
+                      KI-Fahrzeugcheck <ArrowRight className="w-4 h-4 text-zinc-600" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pricing Card */}
+                <div className="lg:col-span-5">
+                  <div className="bg-[#111111] border border-[#222222] rounded-xl p-7 space-y-6">
+                    <div>
+                      <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.3em] block mb-2">Dienstleistung</span>
+                      <h2 className="font-display text-2xl font-extrabold text-white leading-snug">Auto-Beratung<br />Premium</h2>
+                    </div>
+
+                    <div className="border-t border-[#1A1A1A] pt-5 flex items-baseline gap-2.5">
+                      <span className="font-display font-black text-5xl text-white tracking-tight">49 €</span>
+                      <span className="text-xs text-zinc-600 font-semibold uppercase tracking-wider">einmalig, inkl. MwSt.</span>
+                    </div>
+
+                    <div className="border-t border-[#1A1A1A] pt-5 space-y-4">
+                      {[
+                        { n: "01", t: "Recherche & Kriterien", d: "Budget, Wünsche und Alltag — gezielt passende Fahrzeuge." },
+                        { n: "02", t: "3 Empfehlungen mit Links", d: "Handgeprüfte Inserate mit direkten Links auf dem Markt." },
+                        { n: "03", t: "Risiko-Check inklusive", d: "Schwachstellen, Wertverlust und worauf du achten musst." },
+                      ].map(({ n, t, d }) => (
+                        <div key={n} className="flex gap-3.5">
+                          <span className="text-[11px] font-black text-brand-orange/50 font-display shrink-0 mt-0.5 w-5">{n}</span>
+                          <div>
+                            <p className="text-xs font-bold text-white uppercase tracking-wide">{t}</p>
+                            <p className="text-xs text-zinc-600 leading-relaxed mt-0.5">{d}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button onClick={(e) => scrollToSection("booking-section", e)} className="w-full py-3.5 bg-brand-orange text-white text-sm font-bold rounded-lg hover:bg-[#e05621] transition-colors flex items-center justify-center gap-2 cursor-pointer">
+                      Jetzt buchen <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider">
+                      <span className="text-brand-orange font-bold">★ 4.8/5 Zufriedenheit</span>
+                      <span className="text-white font-bold">100% Geld-zurück</span>
+                    </div>
+                  </div>
+                </div>
+
               </div>
-              <button
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="p-1.5 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
-                aria-label="Menü schließen"
-              >
+
+              {/* Trust bar */}
+              <div className="border-t border-[#1A1A1A]">
+                <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12 py-4 flex flex-wrap items-center gap-3 md:gap-6 text-[10px] font-bold text-zinc-700 uppercase tracking-[0.2em]">
+                  <span>Markenneutral</span><span className="text-[#1E1E1E]">—</span>
+                  <span>Finanziell unabhängig</span><span className="text-[#1E1E1E]">—</span>
+                  <span>Geprüfte Qualität</span><span className="text-[#1E1E1E]">—</span>
+                  <span>48h Lieferzeit</span><span className="text-[#1E1E1E]">—</span>
+                  <span className="text-zinc-500 font-semibold">★ 4.8/5 · 148 Bewertungen</span>
+                </div>
+              </div>
+            </section>
+
+            {/* ── ABOUT ── */}
+            <section id="about-me" className="border-t border-[#1A1A1A] py-24 md:py-32 scroll-mt-16">
+              <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+
+                <div className="lg:col-span-7 space-y-8">
+                  <div>
+                    <span className="text-[10px] font-bold text-brand-orange uppercase tracking-[0.3em] block mb-4">Der Typ dahinter</span>
+                    <h2 className="font-display font-black text-4xl md:text-5xl text-white leading-tight">Hey, ich bin<br />Timo.</h2>
+                  </div>
+
+                  <div className="space-y-5 text-zinc-400 leading-relaxed">
+                    <p>Ich mache auf TikTok Content rund ums Thema Geldverdienen, Business und — natürlich — Autos. Mit über <strong className="text-white">400.000 Followern</strong> und <strong className="text-white">6 Millionen Likes</strong> hat sich eine Community aufgebaut, die eine Meinung schätzt, die nicht von einem Autohaus bezahlt wird.</p>
+                    <p>Was mich nervt: Autohäuser verdienen an deiner Unwissenheit. Ich kenne die Tricks, die Preisverhandlungs-Spielchen und die typischen Schwachstellen der beliebtesten Modelle — und ich teile das offen.</p>
+                    <p>Du gibst mir deine Kriterien, ich liefere dir in 48 Stunden 3 ehrliche, handgeprüfte Empfehlungen — ohne versteckte Interessen.</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    <a href="https://tiktok.com/@yotimoo1" target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#111111] border border-[#222222] rounded-lg text-sm font-bold text-white hover:border-[#3A3A3A] hover:text-brand-orange transition-colors">
+                      <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                        <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.02 1.63 4.15 1.02.99 2.44 1.5 3.86 1.59v3.86a9.14 9.14 0 0 1-5.23-1.61v7.62c0 3.66-2.58 6.84-6.17 7.37-4.02.6-7.8-2.1-8.38-6.12-.58-4.02 2.12-7.8 6.13-8.38 1.05-.15 2.12-.04 3.12.32V0zm-3.9 11.23c-2.31-.05-4.28 1.74-4.4 4.05-.12 2.31 1.65 4.31 3.96 4.43 2.31.12 4.31-1.65 4.43-3.96v-.32H11.2c-.08 1.4-1.27 2.47-2.67 2.39-1.4-.08-2.47-1.27-2.39-2.67.08-1.4 1.27-2.47 2.67-2.39v-1.53z"/>
+                      </svg>
+                      TikTok · 400k+
+                    </a>
+                    <a href="https://instagram.com/yotimoo1" target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#111111] border border-[#222222] rounded-lg text-sm font-bold text-white hover:border-[#3A3A3A] hover:text-brand-orange transition-colors">
+                      <Instagram className="w-4 h-4 shrink-0" />
+                      Instagram · @yotimoo1
+                    </a>
+                    <a href="https://enricha.de/products/tiktok-anleitung-2025" target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#111111] border border-[#222222] rounded-lg text-sm font-bold text-white hover:border-[#3A3A3A] hover:text-brand-orange transition-colors">
+                      <Award className="w-4 h-4 text-brand-orange shrink-0" />
+                      Enricha · TikTok Kurs
+                    </a>
+                  </div>
+                </div>
+
+                {/* Stats panel */}
+                <div className="lg:col-span-5">
+                  <div className="bg-[#111111] border border-[#222222] rounded-xl overflow-hidden">
+                    {[
+                      { value: "400K", label: "TikTok-Follower", sub: "@yotimoo1" },
+                      { value: "6M", label: "Likes", sub: "auf TikTok" },
+                      { value: "BMW M4", label: "Persönliches Ziel", sub: "Dream Build" },
+                      { value: "48h", label: "Lieferzeit", sub: "garantiert" },
+                    ].map(({ value, label, sub }, i, arr) => (
+                      <div key={label} className={`px-8 py-6 ${i < arr.length - 1 ? "border-b border-[#1A1A1A]" : ""}`}>
+                        <div className="font-display font-black text-3xl md:text-4xl text-white">{value}</div>
+                        <div className="text-sm font-semibold text-zinc-300 mt-1">{label}</div>
+                        <div className="text-xs text-zinc-600 mt-0.5">{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </section>
+
+            {/* ── BOOKING ── */}
+            <section id="booking-section" ref={bookingRef} className="border-t border-[#1A1A1A] py-24 md:py-32 scroll-mt-16">
+              <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12">
+                <div className="max-w-3xl mx-auto">
+
+                  <div className="mb-12">
+                    <span className="text-[10px] font-bold text-brand-orange uppercase tracking-[0.3em] block mb-4">Bestellformular</span>
+                    <h2 className="font-display font-black text-4xl md:text-5xl text-white leading-tight">Auto-Beratung<br />buchen.</h2>
+                    <p className="text-zinc-400 mt-4 leading-relaxed max-w-lg">Du füllst das Formular aus, ich recherchiere den Markt. <strong className="text-white">3 konkrete Fahrzeug-Empfehlungen</strong> per E-Mail innerhalb von 48 Stunden.</p>
+                  </div>
+
+                  <div className="bg-[#111111] border border-[#222222] rounded-xl overflow-hidden">
+                    <div className="border-b border-[#1A1A1A] px-6 py-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <ShieldCheck className="w-4 h-4 text-brand-orange" />
+                        <span className="text-sm font-bold text-white">Sicherer Checkout · Stripe</span>
+                      </div>
+                      <span className="text-xs font-bold text-zinc-600 uppercase tracking-wider">DSGVO-Konform</span>
+                    </div>
+
+                    {formSubmitted ? (
+                      <div className="p-8 md:p-12 text-center space-y-6">
+                        <div className="w-14 h-14 bg-emerald-950/40 border border-emerald-900/50 rounded-xl flex items-center justify-center mx-auto">
+                          <Check className="w-7 h-7 text-emerald-400 stroke-[2.5]" />
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-black text-white font-display">Anfrage eingegangen!</h4>
+                          <p className="text-zinc-400 mt-2 text-sm">Bestätigung an <strong className="text-white">{email}</strong> gesendet.</p>
+                        </div>
+                        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-lg p-5 text-left space-y-3 max-w-md mx-auto">
+                          <h5 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-[#1A1A1A]">
+                            <Sliders className="w-3.5 h-3.5 text-brand-orange" /> Übermittelte Kriterien
+                          </h5>
+                          <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-xs text-zinc-500">
+                            <span>Budget: <strong className="text-white">{budget ? `${budget} €` : "—"}</strong></span>
+                            <span>Marke: <strong className="text-white">{brand || "Egal"}</strong></span>
+                            <span>Karosserie: <strong className="text-white">{bodyType}</strong></span>
+                            <span>Getriebe: <strong className="text-white">{transmission}</strong></span>
+                            <span>Antrieb: <strong className="text-white">{drive}</strong></span>
+                            <span>E-Mail: <strong className="text-white">{email}</strong></span>
+                          </div>
+                          {notes && <p className="text-xs text-zinc-600 italic pt-2 border-t border-[#1A1A1A]">"{notes}"</p>}
+                        </div>
+                        <p className="text-xs text-zinc-600 max-w-xs mx-auto">Timo prüft deine Anfrage persönlich und sendet dir innerhalb von 48 Stunden 3 Vorschläge.</p>
+                        <button onClick={handleResetForm} className="px-5 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-white text-sm font-bold rounded-lg hover:border-[#3A3A3A] transition-colors cursor-pointer">
+                          Neue Anfrage
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleFormSubmit} className="p-6 md:p-8 space-y-5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div className="space-y-1.5">
+                            <label htmlFor="budget-input" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Budget (€)</label>
+                            <div className="relative">
+                              <input id="budget-input" type="number" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="z. B. 25000"
+                                className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
+                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-700 text-sm">€</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label htmlFor="brand-input" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Wunschmarke</label>
+                            <input id="brand-input" type="text" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="BMW, Audi, Egal..."
+                              className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="body-type" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Karosserietyp</label>
+                          <select id="body-type" value={bodyType} onChange={(e) => setBodyType(e.target.value)}
+                            className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all cursor-pointer">
+                            {["Kleinwagen","Limousine","SUV","Kombi","Coupé","Cabrio","Van"].map(o => <option key={o} value={o} className="bg-[#0D0D0D]">{o}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Getriebe</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {["Schaltgetriebe","Automatik","egal"].map(o => (
+                              <label key={o} className={`border rounded-lg p-3 flex items-center justify-center text-sm font-bold cursor-pointer transition-all select-none ${transmission === o ? "border-brand-orange bg-brand-orange/10 text-brand-orange" : "border-[#222222] bg-[#0D0D0D] text-zinc-600 hover:border-[#333333] hover:text-zinc-300"}`}>
+                                <input type="radio" name="transmission" value={o} checked={transmission === o} onChange={() => setTransmission(o)} className="sr-only" />
+                                <span className="capitalize">{o}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Antrieb</span>
+                          <div className="grid grid-cols-4 gap-2">
+                            {["Frontantrieb","Heckantrieb","Allrad","egal"].map(o => (
+                              <label key={o} className={`border rounded-lg py-3 px-1 flex items-center justify-center text-xs font-bold cursor-pointer transition-all select-none ${drive === o ? "border-brand-orange bg-brand-orange/10 text-brand-orange" : "border-[#222222] bg-[#0D0D0D] text-zinc-600 hover:border-[#333333] hover:text-zinc-300"}`}>
+                                <input type="radio" name="drive" value={o} checked={drive === o} onChange={() => setDrive(o)} className="sr-only" />
+                                <span className="capitalize text-center">{o}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="notes-textarea" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Weitere Wünsche</label>
+                          <textarea id="notes-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="z. B. Mindestens 4 Türen, Panoramadach, Langstrecke..." rows={3}
+                            className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all resize-none" />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="email-input" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">E-Mail <span className="text-brand-orange">*</span></label>
+                          <div className="relative">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
+                            <input id="email-input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="deine.email@beispiel.de"
+                              className="w-full pl-11 pr-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-zinc-700">
+                          <Lock className="w-3.5 h-3.5 shrink-0" />
+                          <span>Verschlüsselt übertragen · Nur zur Erstellung der Empfehlung verwendet</span>
+                        </div>
+
+                        {checkoutError && (
+                          <div className="flex items-start gap-2.5 p-3.5 bg-red-950/20 border border-red-900/50 rounded-lg text-red-400 text-xs">
+                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>{checkoutError}</span>
+                          </div>
+                        )}
+
+                        <button type="submit" disabled={isSubmitting || !email.trim()}
+                          className="w-full py-4 bg-brand-orange text-white font-bold rounded-lg hover:bg-[#e05621] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 text-base cursor-pointer">
+                          {isSubmitting
+                            ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Weiterleitung zu Stripe...</span></>
+                            : <><span>49 € zahlen & Beratung anfragen</span><ArrowRight className="w-5 h-5" /></>}
+                        </button>
+
+                        <p className="text-center text-xs text-zinc-700">Du erhältst innerhalb von 48 Stunden 3 Auto-Vorschläge per E-Mail</p>
+                      </form>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            </section>
+
+            {/* ── REVIEWS ── */}
+            <section id="reviews" className="border-t border-[#1A1A1A] py-24 md:py-32 scroll-mt-16">
+              <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12">
+
+                <div className="mb-14">
+                  <span className="text-[10px] font-bold text-brand-orange uppercase tracking-[0.3em] block mb-4">Erfahrungsberichte</span>
+                  <h2 className="font-display font-black text-4xl md:text-5xl text-white leading-tight">Kunden&shy;bewertungen.</h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[
+                    { title: "Endlich keine Angst mehr vor dem Kauf", text: "Ich hab Timo auf TikTok verfolgt und dann einfach mal die Beratung gebucht. Innerhalb von 24 Stunden hatte ich 3 konkrete Vorschläge mit allem was ich wissen muss. Bin jetzt glücklicher Besitzer eines VW Golf R — und hab dabei noch 1.500 Euro gespart.", name: "Mika S.", time: "vor 2 Wochen" },
+                    { title: "Hat mir echt Nerven gespart", text: "Ich hatte null Plan welches Auto ich nehmen soll und wollte nicht einfach irgendwas kaufen. Die Empfehlung kam schnell, war super verständlich erklärt und Timo hat genau gewusst worauf ich achten muss. Jetzt fahre ich einen BMW 3er und bereue nichts.", name: "Lena K.", time: "vor 1 Monat" },
+                    { title: "49€ die sich mehr als gelohnt haben", text: "Timos TikToks kenn ich schon lange, aber die Beratung hat nochmal einen draufgesetzt. Er hat mir direkt gesagt welches der drei Autos er selbst nehmen würde und warum. Das ist genau das was man braucht wenn man unsicher ist. Absolute Empfehlung!", name: "Jonas W.", time: "vor 3 Wochen" },
+                  ].map(({ title, text, name, time }) => (
+                    <div key={name} className="bg-[#111111] border border-[#222222] rounded-xl p-7 flex flex-col hover:border-[#333333] transition-colors">
+                      <div className="flex text-brand-orange mb-5">
+                        {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-current" />)}
+                      </div>
+                      <blockquote className="flex-grow space-y-2">
+                        <p className="font-bold text-white text-sm">{title}</p>
+                        <p className="text-zinc-500 text-sm leading-relaxed">"{text}"</p>
+                      </blockquote>
+                      <div className="mt-6 pt-5 border-t border-[#1A1A1A] flex justify-between items-center">
+                        <span className="font-bold text-white text-sm">{name}</span>
+                        <span className="text-xs text-zinc-700">{time}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-10 flex items-center gap-3">
+                  <span className="font-display font-black text-2xl text-white">4.8</span>
+                  <div className="flex text-amber-500">{[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-current" />)}</div>
+                  <span className="text-zinc-600 text-sm">· 148 Bewertungen in Deutschland</span>
+                </div>
+
+              </div>
+            </section>
+          </>
+        ) : (
+          /* ── KI-TOOL ── */
+          <section id="ai-tool" className="py-16 md:py-24 scroll-mt-16 min-h-[calc(100vh-64px)]">
+            <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12">
+
+              <div className="mb-10">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#111111] border border-[#222222] rounded-full text-brand-orange text-xs font-bold uppercase tracking-wider mb-4">
+                  <Sparkles className="w-3.5 h-3.5" /> Automatisierter Vor-Check
+                </div>
+                <h2 className="font-display font-black text-4xl md:text-5xl text-white leading-tight">KI-Fahrzeug&shy;analyse.</h2>
+                <p className="text-zinc-500 mt-3 max-w-lg leading-relaxed text-sm">Gib ein Automodell ein und erhalte sofort Infos zu Leistung, Verbrauch, Wertverlust und bekannten Schwachstellen.</p>
+              </div>
+
+              <div className="bg-[#111111] border border-[#222222] rounded-xl p-6 md:p-8 max-w-3xl">
+                <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-grow">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
+                    <input type="text" value={carQuery} onChange={(e) => setCarQuery(e.target.value)} placeholder="z. B. Mercedes C63 AMG"
+                      className="w-full pl-11 pr-4 py-3.5 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
+                  </div>
+                  <button type="submit" disabled={isAnalyzing || !carQuery.trim()}
+                    className="px-6 py-3.5 bg-brand-orange text-white font-bold rounded-lg hover:bg-[#e05621] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm cursor-pointer">
+                    {isAnalyzing ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Analysiere...</span></> : <><span>Analysieren</span><ArrowRight className="w-4 h-4" /></>}
+                  </button>
+                </form>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-semibold text-zinc-600">Häufig gesucht:</span>
+                  {["Golf GTI","BMW M3","Mercedes C63 AMG","Audi RS6","Porsche 911"].map(qc => (
+                    <button key={qc} type="button" onClick={() => runQuickAnalyze(qc)}
+                      className="px-2.5 py-1 bg-[#0D0D0D] border border-[#1E1E1E] rounded-md hover:border-[#333333] hover:text-zinc-300 text-zinc-600 transition-colors cursor-pointer font-medium">
+                      {qc}
+                    </button>
+                  ))}
+                </div>
+
+                {isAnalyzing && (
+                  <div className="mt-8 py-10 flex flex-col items-center gap-3 border-t border-[#1A1A1A]">
+                    <Loader2 className="w-8 h-8 text-brand-orange animate-spin" />
+                    <div className="text-center">
+                      <p className="font-bold text-zinc-200 text-sm">KI analysiert Fahrzeugdaten...</p>
+                      <p className="text-xs text-zinc-600 mt-1">Quellen: ADAC, Auto Bild, Hersteller</p>
+                    </div>
+                  </div>
+                )}
+
+                {analyzeError && !isAnalyzing && (
+                  <div className="mt-5 p-4 bg-red-950/20 border border-red-900/50 rounded-lg flex items-start gap-3 text-red-400">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-sm">Analyse fehlgeschlagen</p>
+                      <p className="text-xs mt-1 opacity-80">{analyzeError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {analyzedCar && !isAnalyzing && (
+                  <div className="mt-8 pt-6 border-t border-[#1A1A1A] space-y-5">
+                    <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
+                      <div>
+                        <span className="text-[10px] text-brand-orange font-bold uppercase tracking-widest block mb-1">Analyse-Ergebnis</span>
+                        <h3 className="text-xl font-black text-white font-display flex items-center gap-2">
+                          <Car className="w-5 h-5 text-brand-orange shrink-0" />{analyzedCar.name}
+                        </h3>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-950/40 text-emerald-400 border border-emerald-900/50 rounded-full text-xs font-bold shrink-0">
+                        <CheckCircle className="w-3.5 h-3.5" /> Ausgewertet
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: "Leistung (PS)", value: analyzedCar.leistung, icon: <Gauge className="w-4 h-4 text-brand-orange" /> },
+                        { label: "Verbrauch", value: analyzedCar.verbrauch, icon: <Fuel className="w-4 h-4 text-brand-orange" /> },
+                        { label: "Wertverlust", value: analyzedCar.wertverlust, icon: <TrendingDown className="w-4 h-4 text-brand-orange" /> },
+                        { label: "Bekannte Mängel", value: analyzedCar.maengel.split(",")[0], icon: <AlertTriangle className="w-4 h-4 text-brand-orange" /> },
+                      ].map(({ label, value, icon }) => (
+                        <div key={label} className="bg-[#0D0D0D] border border-[#1E1E1E] rounded-lg p-4 hover:border-[#2A2A2A] transition-colors">
+                          <div className="flex items-center justify-between mb-2.5">
+                            {icon}
+                            <span className="text-[9px] text-zinc-700 uppercase tracking-wider font-bold text-right">{label}</span>
+                          </div>
+                          <p className="text-sm font-bold text-white leading-snug">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="bg-[#0D0D0D] border border-[#1E1E1E] rounded-lg overflow-hidden">
+                      <button type="button" onClick={() => setShowAllDetails(!showAllDetails)}
+                        className="w-full px-5 py-3.5 flex items-center justify-between text-sm font-bold text-white hover:bg-[#111111] transition-colors cursor-pointer select-none">
+                        <span className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-brand-orange" />Ausführlicher KI-Checkbericht</span>
+                        {showAllDetails ? <ChevronUp className="w-4 h-4 text-brand-orange" /> : <ChevronDown className="w-4 h-4 text-brand-orange" />}
+                      </button>
+                      {showAllDetails && (
+                        <div className="px-5 pb-5 pt-3 border-t border-[#1A1A1A] space-y-4">
+                          <p className="text-sm text-zinc-400 leading-relaxed">{analyzedCar.details}</p>
+                          <div className="p-4 bg-brand-orange/5 border border-brand-orange/10 rounded-lg">
+                            <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 text-brand-orange" /> Schwachstellen im Detail:
+                            </h4>
+                            <p className="text-xs text-zinc-300 leading-relaxed">{analyzedCar.maengel}</p>
+                          </div>
+                          <p className="text-xs text-zinc-700 italic">Hinweis: Diese Voranalyse basiert auf statistischen Daten. Jedes gebrauchte Fahrzeug muss vor Ort begutachtet werden.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CTA under AI tool */}
+              <div className="mt-10 max-w-3xl bg-[#111111] border border-[#222222] rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+                <div>
+                  <h3 className="text-lg font-black text-white font-display">Brauchst du persönliche Hilfe?</h3>
+                  <p className="text-zinc-500 text-sm mt-1">3 handgeprüfte Inserate — maßgeschneidert für dein Budget.</p>
+                </div>
+                <button onClick={(e) => scrollToSection("booking-section", e)}
+                  className="px-5 py-3 bg-brand-orange text-white text-sm font-bold rounded-lg hover:bg-[#e05621] transition-colors shrink-0 flex items-center gap-2 cursor-pointer">
+                  Zur Beratung <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+
+            </div>
+          </section>
+        )}
+
+      </main>
+
+      {/* ─── FOOTER ─── */}
+      <footer className="border-t border-[#1A1A1A] py-10 mt-auto">
+        <div className="max-w-7xl mx-auto px-6 md:px-8 lg:px-12 flex flex-col md:flex-row justify-between items-center gap-5 text-xs text-zinc-600">
+          <div className="text-center md:text-left space-y-0.5">
+            <p className="font-black text-white text-sm uppercase tracking-wide font-display">Timo's Auto-Beratung</p>
+            <p>© 2026 YoTimo Auto-Beratung. Alle Rechte vorbehalten.</p>
+          </div>
+          <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 font-medium">
+            {[["impressum","Impressum"],["widerruf","Widerrufsbelehrung"],["agb","AGB"],["datenschutz","Datenschutz"]].map(([key,label]) => (
+              <button key={key} onClick={() => setActiveModal(key)} className="hover:text-white transition-colors cursor-pointer">{label}</button>
+            ))}
+          </nav>
+        </div>
+      </footer>
+
+      {/* ─── LEGAL MODALS ─── */}
+      {activeModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#111111] border border-[#222222] rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative">
+            <div className="sticky top-0 bg-[#111111] border-b border-[#1A1A1A] px-6 py-4 flex items-center justify-between z-10">
+              <h4 className="text-base font-black text-white uppercase tracking-wide font-display">
+                {activeModal === "impressum" && "Impressum"}
+                {activeModal === "widerruf" && "Widerrufsbelehrung"}
+                {activeModal === "agb" && "Allgemeine Geschäftsbedingungen"}
+                {activeModal === "datenschutz" && "Datenschutzerklärung"}
+              </h4>
+              <button onClick={() => setActiveModal(null)} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/5 transition-colors cursor-pointer" aria-label="Schließen">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <nav className="flex-grow space-y-1.5 overflow-y-auto">
-              <button
-                onClick={() => { setActiveView("home"); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-                  activeSection === "home"
-                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Home className="w-5 h-5" />
-                <span>Startseite</span>
-              </button>
-
-              <button
-                onClick={() => { setActiveView("ai-tool"); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-                  activeSection === "ai-tool"
-                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Search className="w-5 h-5" />
-                <span>KI-Fahrzeugsuche</span>
-              </button>
-
-              <button
-                onClick={(e) => scrollToSection("booking-section", e)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-                  activeSection === "booking-section"
-                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Calendar className="w-5 h-5" />
-                <span>Beratung buchen</span>
-              </button>
-
-              <button
-                onClick={(e) => scrollToSection("reviews", e)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer ${
-                  activeSection === "reviews"
-                    ? "bg-brand-orange/10 text-brand-orange border-l-4 border-brand-orange"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Star className="w-5 h-5" />
-                <span>Bewertungen</span>
-              </button>
-            </nav>
-
-            {/* Sidebar Footer */}
-            <div className="pt-6 border-t border-[#333333] space-y-3 mt-auto">
-              <div className="text-[10px] text-slate-500 font-medium px-2">
-                © 2026 YoTimo Auto-Beratung
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1.5 px-2 text-[10px] font-semibold text-slate-400">
-                <button onClick={() => { setActiveModal("impressum"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">Impressum</button>
-                <button onClick={() => { setActiveModal("widerruf"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">Widerruf</button>
-                <button onClick={() => { setActiveModal("agb"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">AGB</button>
-                <button onClick={() => { setActiveModal("datenschutz"); setIsMobileMenuOpen(false); }} className="hover:text-brand-orange cursor-pointer">Datenschutz</button>
-              </div>
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex-grow flex flex-col lg:pl-72 pt-16 lg:pt-0 min-h-screen bg-brand-dark overflow-x-hidden">
-        
-        {/* Desktop Top Bar */}
-        <header className="hidden lg:block border-b border-[#333333] sticky top-0 bg-brand-dark/80 backdrop-blur-md z-20 w-full">
-          <div className="max-w-7xl mx-auto w-full h-20 px-8 lg:px-12 flex items-center justify-between">
-            {/* Left: breadcrumbs / navigation indicator */}
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-              {activeView === "home" ? (
-                <span className="text-slate-400">Startseite</span>
-              ) : (
-                <>
-                  <button 
-                    onClick={() => setActiveView("home")} 
-                    className="hover:text-brand-orange transition-colors cursor-pointer"
-                  >
-                    Startseite
-                  </button>
-                  <span className="text-slate-600">/</span>
-                  <span className="text-brand-orange">KI-Fahrzeugsuche</span>
-                </>
-              )}
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-grow p-4 md:p-8 lg:p-12 max-w-7xl mx-auto w-full space-y-12">
-          {activeView === "home" ? (
-            <>
-              {/* 1. HERO SECTION */}
-              <section 
-                id="home" 
-                className="relative flex flex-col justify-center items-center px-4 py-12 md:py-16 lg:pt-16 lg:pb-24 bg-brand-dark overflow-hidden"
-              >
-                <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start relative z-10">
-          
-          {/* Left Column: Headline and Subheading */}
-          <div className="lg:col-span-7 space-y-6 md:space-y-8 text-center lg:text-left relative z-10">
-            <div className="text-[10px] font-bold text-brand-orange uppercase tracking-[0.2em] mb-4">
-              Herstellerunabhängige Beratung
-            </div>
-            
-            <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
-              Finde dein <span className="text-brand-orange">perfektes</span> Auto
-            </h1>
-            
-            <p className="text-base md:text-lg lg:text-xl text-slate-400 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-              Du weißt nicht welches Auto wirklich zu dir passt — oder willst keinen Fehlkauf riskieren? Ich bin Timo, und ich helfe dir mit echter Marktkenntnis, dem richtigen Auto für dein Budget. Kein Bullshit, kein Autohaus-Druck — nur eine ehrliche Empfehlung von jemandem, der selbst täglich Autos analysiert.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-4 text-[11px] font-bold uppercase tracking-wider text-slate-400 justify-center lg:justify-start pt-6 border-t border-[#333333]/50 mt-8">
-              <span>Markenneutral</span>
-              <span className="text-slate-700 font-normal">//</span>
-              <span>Finanziell unabhängig</span>
-              <span className="text-slate-700 font-normal">//</span>
-              <span>Geprüfte Qualität</span>
-            </div>
-          </div>
-
-          {/* Right Column: Premium Service Details (Swiss/Editorial Layout) */}
-          <div className="lg:col-span-5 w-full max-w-md mx-auto lg:border-l lg:border-[#333333] lg:pl-12 relative z-10">
-            <div className="relative">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2 block">
-                Dienstleistung
-              </span>
-              
-              <h2 className="text-3xl font-extrabold text-white mb-2 font-display">
-                Auto-Beratung Premium
-              </h2>
-              
-              <div className="flex items-baseline gap-2 my-5">
-                <span className="text-5xl font-black text-white tracking-tight">49 €</span>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">einmalig, inkl. MwSt.</span>
-              </div>
-
-              <hr className="border-[#333333] my-6" />
-
-              <ul className="space-y-6 mb-8">
-                <li className="flex flex-col gap-1.5 pb-5 border-b border-[#333333]/40">
-                  <span className="text-white text-xs font-bold uppercase tracking-wider">1. Recherche & Kriterien</span>
-                  <span className="text-slate-400 text-xs leading-relaxed">
-                    Ich nehme dein Budget, deine Wünsche und deinen Alltag ernst — und suche gezielt passende Fahrzeuge raus, die wirklich zu dir passen.
-                  </span>
-                </li>
-                <li className="flex flex-col gap-1.5 pb-5 border-b border-[#333333]/40">
-                  <span className="text-white text-xs font-bold uppercase tracking-wider">2. 3 Empfehlungen mit Links</span>
-                  <span className="text-slate-400 text-xs leading-relaxed">
-                    Keine graue Theorie — du bekommst 3 handgeprüfte Inserate mit direkten Links zu aktuellen Angeboten auf dem Markt.
-                  </span>
-                </li>
-                <li className="flex flex-col gap-1.5 pb-1">
-                  <span className="text-white text-xs font-bold uppercase tracking-wider">3. Risiko-Check inklusive</span>
-                  <span className="text-slate-400 text-xs leading-relaxed">
-                    Bekannte Schwachstellen, typischer Wertverlust und worauf du beim Kauf achten musst — damit du nicht in eine Kostenfalle tappst.
-                  </span>
-                </li>
-              </ul>
-
-              <a 
-                href="#booking-section"
-                onClick={(e) => scrollToSection("booking-section", e)}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-brand-orange text-white font-bold rounded-xl shadow-sm hover:bg-[#e05621] transition-colors duration-200 text-center uppercase tracking-wider text-sm"
-                aria-label="Jetzt Beratung buchen"
-              >
-                Jetzt Beratung buchen
-                <ArrowRight className="w-4 h-4" />
-              </a>
-
-              {/* Trust Indicators */}
-              <div className="mt-8 flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-[0.15em]">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <span className="text-brand-orange">★ 4.8/5</span>
-                  <span>Zufriedenheit</span>
-                </div>
-                <div className="w-1 h-1 rounded-full bg-slate-700" />
-                <div className="font-bold text-white">
-                  100% Geld-zurück-Garantie
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* 2. "ABOUT ME" SECTION (CLEAN MINIMAL PANEL) */}
-      <section 
-        id="about-me" 
-        className="bg-brand-light/30 rounded-2xl border border-[#333333] p-8 md:p-12 shadow-sm"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          
-          {/* Left: Avatar Column */}
-          <div className="lg:col-span-5 flex flex-col items-center justify-center">
-            <div className="relative">
-              {/* Main Avatar Frame */}
-              <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-[#262626] shadow-xl overflow-hidden relative z-10 bg-gradient-to-tr from-brand-orange to-[#e05621] flex items-center justify-center">
-                <span className="text-white font-extrabold text-7xl md:text-8xl font-display select-none">T</span>
-              </div>
-            </div>
-            
-            {/* Badges below avatar */}
-            <div className="mt-6 flex gap-3 z-20">
-              <span className="px-3.5 py-1.5 bg-[#1A1A1A] text-white text-xs font-bold rounded-full border border-[#333333] flex items-center gap-1">
-                <Award className="w-3.5 h-3.5 text-brand-orange" />
-                400k+ TikTok Follower
-              </span>
-              <span className="px-3.5 py-1.5 bg-[#1A1A1A] text-white text-xs font-bold rounded-full border border-[#333333] flex items-center gap-1">
-                <Car className="w-3.5 h-3.5 text-brand-orange" />
-                BMW M4 Dream Build
-              </span>
-            </div>
-          </div>
-
-          {/* Right: Biography & Social Proof */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="text-center lg:text-left">
-              <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Der Typ dahinter</span>
-              <h2 className="font-display text-3xl md:text-4xl font-extrabold text-white mt-1">
-                Hey, ich bin Timo.
-              </h2>
-              <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto lg:mx-0" />
-            </div>
-
-            {/* Bio: Three paragraphs of German text marked as required */}
-            <div className="space-y-4 text-slate-300 leading-relaxed text-sm md:text-base">
-              <p>
-                Ich mache auf TikTok Content rund ums Thema Geldverdienen, Business und — natürlich — Autos. Mit über <strong className="text-white">400.000 Followern</strong> und <strong className="text-white">6 Millionen Likes</strong> hat sich eine Community aufgebaut, die eine Meinung schätzt, die nicht von einem Autohaus bezahlt wird. Mein persönliches Ziel ist der BMW M4 — und der Weg dahin hat mich gelehrt, wie der Automarkt wirklich funktioniert.
-              </p>
-              <p>
-                Was mich nervt: Autohäuser verdienen an deiner Unwissenheit. Sie verkaufen dir das Auto mit der höchsten Marge, nicht das, das am besten zu dir passt. Ich kenne die Tricks, die Preisverhandlungs-Spielchen und die typischen Schwachstellen der beliebtesten Modelle auf dem deutschen Markt — und ich teile das offen.
-              </p>
-              <p>
-                Diese Beratung ist mein Service für alle, die nicht tagelang recherchieren wollen oder sich nicht sicher sind, ob das Angebot das sie gefunden haben wirklich gut ist. Du gibst mir deine Kriterien, ich liefere dir in 48 Stunden 3 ehrliche, handgeprüfte Empfehlungen — ohne versteckte Interessen.
-              </p>
-            </div>
-
-            {/* Social Proof Channels */}
-            <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-[#333333] space-y-4">
-              <h3 className="font-bold text-white text-sm tracking-wide uppercase">
-                Bekannt von TikTok:
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                {/* TikTok Card */}
-                <a 
-                  href="https://tiktok.com/@yotimoo1" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 md:gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
-                  aria-label="Besuche Timo auf TikTok"
-                >
-                  <div className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
-                    {/* Custom TikTok SVG since standard Lucide does not include it */}
-                    <svg className="w-4.5 h-4.5 md:w-5 md:h-5 fill-current" viewBox="0 0 24 24">
-                      <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.02 1.63 4.15 1.02.99 2.44 1.5 3.86 1.59v3.86a9.14 9.14 0 0 1-5.23-1.61v7.62c0 3.66-2.58 6.84-6.17 7.37-4.02.6-7.8-2.1-8.38-6.12-.58-4.02 2.12-7.8 6.13-8.38 1.05-.15 2.12-.04 3.12.32V0zm-3.9 11.23c-2.31-.05-4.28 1.74-4.4 4.05-.12 2.31 1.65 4.31 3.96 4.43 2.31.12 4.31-1.65 4.43-3.96v-.32H11.2c-.08 1.4-1.27 2.47-2.67 2.39-1.4-.08-2.47-1.27-2.39-2.67.08-1.4 1.27-2.47 2.67-2.39v-1.53z"/>
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm md:text-base text-white group-hover:text-brand-orange transition-colors truncate" title="TikTok">TikTok</p>
-                    <p className="text-xs text-slate-400 truncate" title="400k+ Follower">400k+ Follower</p>
-                  </div>
-                </a>
-
-                {/* Instagram Card */}
-                <a 
-                  href="https://instagram.com/yotimoo1" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 md:gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
-                  aria-label="Besuche Timo auf Instagram"
-                >
-                  <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
-                    <Instagram className="w-5 h-5 md:w-6 md:h-6 stroke-[2]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm md:text-base text-white group-hover:text-brand-orange transition-colors truncate" title="Instagram">Instagram</p>
-                    <p className="text-xs text-slate-400 truncate" title="@yotimoo1">@yotimoo1</p>
-                  </div>
-                </a>
-
-                {/* Enricha Card */}
-                <a
-                  href="https://enricha.de/products/tiktok-anleitung-2025"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 md:gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
-                  aria-label="Timocar auf Enricha"
-                >
-                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-[#1A1A1A] border border-[#333333] flex items-center justify-center p-2">
-                    <img src="/enricha.png" alt="Enricha" className="w-full h-full object-contain" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm md:text-base text-white group-hover:text-brand-orange transition-colors truncate" title="Enricha">Enricha</p>
-                    <p className="text-xs text-slate-400 truncate" title="TikTok Kurs">TikTok Kurs</p>
-                  </div>
-                </a>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-        </>
-      ) : (
-        <>
-          {/* 3. CAR AI TOOL SECTION (PREMIUM DARK PANEL) */}
-          <section 
-            id="ai-tool" 
-            className="bg-brand-dark text-white rounded-2xl p-8 md:p-12 shadow-sm border border-white/5 relative overflow-hidden scroll-mt-6"
-      >
-        
-        <div className="relative z-10">
-          
-          <div className="text-center space-y-4 max-w-2xl mx-auto mb-12">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-full text-brand-orange border border-white/10 text-xs font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              Automatisierter Vor-Check
-            </div>
-            
-            <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight text-white">
-              Auto-Check: KI-Fahrzeuganalyse
-            </h2>
-            
-            <p className="text-slate-300 text-sm md:text-base leading-relaxed">
-              Gib ein Automodell ein und erhalte sofort alle wichtigen Infos zu Leistung, Verbrauch, typischem Wertverlust und bekannten Schwachstellen.
-            </p>
-          </div>
-
-          {/* Interactive Input Form */}
-          <div className="bg-white/5 rounded-2xl p-6 md:p-8 border border-white/10 shadow-xl max-w-3xl mx-auto">
-            <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-grow">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                  <Search className="w-5 h-5" />
-                </div>
-                <input 
-                  type="text"
-                  value={carQuery}
-                  onChange={(e) => setCarQuery(e.target.value)}
-                  placeholder="z. B. Mercedes C63 AMG"
-                  className="w-full pl-11 pr-4 py-4 bg-white/10 rounded-xl border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-white/15 transition-all duration-300 font-semibold"
-                  aria-label="Automodell für KI-Fahrzeuganalyse eingeben"
-                />
-              </div>
-              <button 
-                type="submit"
-                disabled={isAnalyzing || !carQuery.trim()}
-                className="px-8 py-4 bg-brand-orange text-white font-bold rounded-xl shadow-lg shadow-brand-orange/20 hover:bg-[#e05621] hover:shadow-brand-orange/30 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-300 flex items-center justify-center gap-2"
-                aria-label="Fahrzeug analysieren"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Analysiere...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Analysieren</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
-            </form>
-
-            {/* Quick-links for preset queries */}
-            <div className="mt-4 flex flex-wrap items-center gap-2 justify-center sm:justify-start text-xs text-slate-400">
-              <span className="font-semibold">Häufig gesucht:</span>
-              {["Golf GTI", "BMW M3", "Mercedes C63 AMG", "Audi RS6", "Porsche 911"].map((quickCar) => (
-                <button
-                  key={quickCar}
-                  type="button"
-                  onClick={async () => {
-                    setCarQuery(quickCar);
-                    setIsAnalyzing(true);
-                    setAnalyzedCar(null);
-                    setAnalyzeError(null);
-                    setShowAllDetails(false);
-                    try {
-                      const res = await fetch("/api/analyze-car", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ query: quickCar }),
-                      });
-                      const data = await res.json();
-                      if (!res.ok) setAnalyzeError(data.error ?? "Fehler");
-                      else setAnalyzedCar(data as CarDetail);
-                    } catch {
-                      setAnalyzeError("Verbindung fehlgeschlagen.");
-                    } finally {
-                      setIsAnalyzing(false);
-                    }
-                  }}
-                  className="px-2.5 py-1 bg-white/5 rounded-md hover:bg-white/10 hover:text-white border border-white/5 hover:border-white/10 transition-colors cursor-pointer font-medium"
-                >
-                  {quickCar}
-                </button>
-              ))}
-            </div>
-
-            {/* Loading Spinner */}
-            {isAnalyzing && (
-              <div className="mt-8 py-12 flex flex-col items-center justify-center space-y-4 border-t border-white/10">
-                <Loader2 className="w-10 h-10 text-brand-orange animate-spin" />
-                <div className="text-center">
-                  <p className="font-bold text-slate-200">KI durchsucht das Web nach Fahrzeugdaten...</p>
-                  <p className="text-xs text-slate-400 mt-1">Kann 10–20 Sekunden dauern. Quellen: ADAC, Auto Bild, Hersteller.</p>
-                </div>
-              </div>
-            )}
-
-            {/* Error State */}
-            {analyzeError && !isAnalyzing && (
-              <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-300">
-                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-400" />
-                <div>
-                  <p className="font-bold text-sm text-red-300">Analyse fehlgeschlagen</p>
-                  <p className="text-xs mt-1 text-red-400/80">{analyzeError}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Results Container (shown after analysis completes) */}
-            {analyzedCar && !isAnalyzing && (
-              <div className="mt-8 pt-8 border-t border-white/10 space-y-6 animate-fadeIn">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <span className="text-brand-orange text-xs font-bold uppercase tracking-widest block mb-1">Analyse-Ergebnis</span>
-                    <h3 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2 font-display">
-                      <Car className="w-6 h-6 text-brand-orange" />
-                      {analyzedCar.name}
-                    </h3>
-                  </div>
-                  <div className="shrink-0">
-                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20 text-xs font-semibold">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Erfolgreich ausgewertet
-                    </span>
-                  </div>
-                </div>
-
-                {/* 4-Column Spec Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                  
-                  {/* Card 1: Leistung */}
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span className="text-xs font-semibold tracking-wider uppercase">Leistung (PS)</span>
-                      <Gauge className="w-5 h-5 text-brand-orange" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold text-white">{analyzedCar.leistung}</p>
-                    </div>
-                  </div>
-
-                  {/* Card 2: Verbrauch */}
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span className="text-xs font-semibold tracking-wider uppercase">Verbrauch</span>
-                      <Fuel className="w-5 h-5 text-brand-orange" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold text-white">{analyzedCar.verbrauch}</p>
-                    </div>
-                  </div>
-
-                  {/* Card 3: Wertverlust */}
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span className="text-xs font-semibold tracking-wider uppercase">Wertverlust</span>
-                      <TrendingDown className="w-5 h-5 text-brand-orange" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold text-white">{analyzedCar.wertverlust}</p>
-                    </div>
-                  </div>
-
-                  {/* Card 4: Bekannte Mängel */}
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors min-w-0">
-                    <div className="flex items-center justify-between text-slate-400 gap-2 min-w-0">
-                      <span className="text-xs font-semibold tracking-wider uppercase">Bekannte Mängel</span>
-                      <AlertTriangle className="w-5 h-5 text-brand-orange shrink-0" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-lg font-bold text-white break-words" title={analyzedCar.maengel}>
-                        {analyzedCar.maengel.split(",")[0]}
-                      </p>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Expandable Section "Alle Details anzeigen" */}
-                <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setShowAllDetails(!showAllDetails)}
-                    className="w-full px-6 py-4 flex items-center justify-between font-bold text-sm text-white hover:bg-white/5 transition-colors cursor-pointer select-none"
-                    aria-expanded={showAllDetails}
-                    aria-label="Alle Details zur Fahrzeuganalyse anzeigen"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-brand-orange" />
-                      Ausführlicher KI-Checkbericht
-                    </span>
-                    <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">
-                      <span>{showAllDetails ? "Ausblenden" : "Alle Details anzeigen"}</span>
-                      {showAllDetails ? (
-                        <ChevronUp className="w-4 h-4 text-brand-orange" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-brand-orange" />
-                      )}
-                    </div>
-                  </button>
-
-                  {showAllDetails && (
-                    <div className="px-6 pb-6 pt-2 border-t border-white/5 text-slate-300 text-sm leading-relaxed space-y-4 animate-slideDown">
-                      <p className="font-medium">{analyzedCar.details}</p>
-                      <div className="p-4 bg-brand-orange/10 border border-brand-orange/20 rounded-xl space-y-2">
-                        <h4 className="font-bold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider">
-                          <AlertTriangle className="w-4 h-4 text-brand-orange" />
-                          Schwachstellen im Detail:
-                        </h4>
-                        <p className="text-xs text-slate-200 leading-relaxed font-semibold">{analyzedCar.maengel}</p>
-                      </div>
-                      <p className="text-xs text-slate-400 italic">
-                        Hinweis: Diese Voranalyse basiert auf statistischen Daten, aggregierten Prüfberichten und Erfahrungsberichten unseres KI-Modells. Jedes gebrauchte Fahrzeug muss vor Ort sorgfältig physisch begutachtet werden.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )}
-
-          </div>
-
-          {/* CTA Banner at the bottom of the section */}
-          <div className="mt-12 bg-gradient-to-r from-[#1E1E1E] to-[#111111] rounded-2xl p-6 md:p-8 border border-[#333333] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl max-w-4xl mx-auto">
-            <div className="space-y-2 text-center md:text-left">
-              <h3 className="text-xl md:text-2xl font-bold text-white font-display">
-                Brauchst du Hilfe bei der Auswahl?
-              </h3>
-              <p className="text-slate-300 text-sm max-w-lg font-medium leading-relaxed">
-                Gib dich nicht mit Standardwerten zufrieden. Buche meine maßgeschneiderte Premium-Beratung für 49 € und erhalte 3 handgeprüfte Inserate.
-              </p>
-            </div>
-            <a 
-              href="#booking-section"
-              onClick={(e) => scrollToSection("booking-section", e)}
-              className="px-6 py-3.5 bg-brand-orange text-white text-sm font-bold rounded-xl shadow-lg shadow-brand-orange/20 hover:bg-[#e05621] transition-all duration-300 hover:scale-[1.03] shrink-0"
-              aria-label="Zur Beratung scrollen"
-            >
-              Zur Beratung
-            </a>
-          </div>
-
-        </div>
-      </section>
-        </>
-      )}
-
-      {activeView === "home" && (
-        <>
-          {/* 4. PRODUCT / PURCHASE SECTION */}
-          <section 
-            id="booking-section" 
-            ref={bookingRef}
-            className="bg-brand-light/30 rounded-2xl border border-[#333333] p-8 md:p-12 shadow-sm scroll-mt-6"
-          >
-        <div className="w-full max-w-3xl mx-auto">
-          
-          <div className="text-center space-y-4 mb-10">
-            <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Bestellformular</span>
-            <h2 className="font-display text-3xl md:text-4xl font-extrabold text-white">
-              Auto-Beratung buchen
-            </h2>
-            <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto" />
-            
-            <p className="text-slate-400 text-sm md:text-base max-w-xl mx-auto leading-relaxed font-medium">
-              Du füllst das Formular aus, ich recherchiere für dich den Markt. Du bekommst <strong className="text-white">3 konkrete Fahrzeug-Empfehlungen</strong> per E-Mail — inklusive Inserat-Links, Risiko-Check und dem, was ich dir als jemand der täglich Autos analysiert, ehrlich dazu sagen würde.
-            </p>
-            
-            <div className="inline-flex items-center bg-brand-orange/10 border border-brand-orange/20 px-5 py-2.5 rounded-2xl text-brand-orange font-bold text-lg md:text-xl shadow-sm">
-              <span>49 € einmalig</span>
-            </div>
-          </div>
-
-          {/* Booking / Purchase Form */}
-          <div className="bg-brand-light rounded-2xl border border-[#333333] shadow-lg overflow-hidden">
-            <div className="bg-[#111111] border-b border-[#333333] text-white p-5 px-6 md:px-8 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <ShieldCheck className="w-6 h-6 text-brand-orange shrink-0" />
-                <div>
-                  <h3 className="font-bold text-sm md:text-base font-display">Sicherer Checkout</h3>
-                  <p className="text-xs text-slate-400">Deine Anfrage wird direkt bearbeitet</p>
-                </div>
-              </div>
-              <span className="text-xs text-brand-orange font-bold bg-white/5 px-2.5 py-1 rounded-md uppercase tracking-wider">
-                100% DSGVO-Konform
-              </span>
-            </div>
-
-            {formSubmitted ? (
-              // Success State
-              <div className="p-8 md:p-12 text-center space-y-6 animate-fadeIn">
-                <div className="w-20 h-20 bg-emerald-950/40 text-emerald-500 border border-emerald-900 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                  <Check className="w-10 h-10 stroke-[3]" />
-                </div>
-                
-                <div className="space-y-2">
-                  <h4 className="text-2xl font-extrabold text-white font-display">Beratungsanfrage eingegangen!</h4>
-                  <p className="text-slate-350 max-w-md mx-auto text-sm leading-relaxed">
-                    Vielen Dank für deinen Auftrag! Wir haben deine Daten erfolgreich erhalten. Eine Bestätigung wurde an <strong className="text-white">{email}</strong> gesendet.
-                  </p>
-                </div>
-
-                <div className="bg-[#1A1A1A] rounded-2xl p-5 border border-[#333333] text-left text-sm space-y-3 max-w-lg mx-auto">
-                  <h5 className="font-bold text-white flex items-center gap-2 border-b border-[#333333] pb-2 text-xs uppercase tracking-wider">
-                    <Sliders className="w-4 h-4 text-brand-orange" />
-                    Übermittelte Kriterien:
-                  </h5>
-                  <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-300 font-semibold">
-                    <div>Budget: <strong className="text-white">{budget ? `${budget} €` : "Nicht angegeben"}</strong></div>
-                    <div>Wunschmarke: <strong className="text-white">{brand || "Egal"}</strong></div>
-                    <div>Karosserie: <strong className="text-white">{bodyType}</strong></div>
-                    <div>Getriebe: <strong className="text-white">{transmission}</strong></div>
-                    <div>Antrieb: <strong className="text-white">{drive}</strong></div>
-                    <div>E-Mail: <strong className="text-white">{email}</strong></div>
-                  </div>
-                  {notes && (
-                    <div className="border-t border-[#333333] pt-2 text-xs">
-                      <span className="font-semibold text-white block mb-1">Deine Notizen:</span>
-                      <p className="text-slate-400 italic">"{notes}"</p>
-                    </div>
-                  )}
-                </div>
-
-                <p className="text-xs text-slate-400 max-w-sm mx-auto font-medium">
-                  Deine Anfrage wird nun von Timo persönlich geprüft und innerhalb der nächsten 48 Stunden per E-Mail an dich versendet.
-                </p>
-
-                <div className="pt-4">
-                  <button
-                    type="button"
-                    onClick={handleResetForm}
-                    className="px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white border border-[#333333] text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer"
-                  >
-                    Neue Anfrage erstellen
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // Active Form Form State
-              <form onSubmit={handleFormSubmit} className="p-6 md:p-8 space-y-6">
-                
-                {/* Grid budget & brand */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Dein Budget */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="budget-input" className="block text-sm font-bold text-slate-300">
-                      Dein Budget (€)
-                    </label>
-                    <div className="relative">
-                      <input 
-                        id="budget-input"
-                        type="number" 
-                        value={budget}
-                        onChange={(e) => setBudget(e.target.value)}
-                        placeholder="z. B. 25000"
-                        className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold text-sm"
-                        aria-label="Dein Budget in Euro"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">€</span>
-                    </div>
-                  </div>
-
-                  {/* Gewünschte Automarke */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="brand-input" className="block text-sm font-bold text-slate-300">
-                      Gewünschte Automarke
-                    </label>
-                    <input 
-                      id="brand-input"
-                      type="text" 
-                      value={brand}
-                      onChange={(e) => setBrand(e.target.value)}
-                      placeholder="z. B. BMW, Audi oder Keine Präferenz"
-                      className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold text-sm"
-                      aria-label="Gewünschte Automarke"
-                    />
-                  </div>
-                </div>
-
-                {/* Bevorzugter Karosserietyp Select Dropdown */}
-                <div className="space-y-1.5">
-                  <label htmlFor="body-type" className="block text-sm font-bold text-slate-300">
-                    Bevorzugter Karosserietyp
-                  </label>
-                  <select 
-                    id="body-type"
-                    value={bodyType}
-                    onChange={(e) => setBodyType(e.target.value)}
-                    className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold cursor-pointer text-sm"
-                    aria-label="Bevorzugter Karosserietyp"
-                  >
-                    <option value="Kleinwagen" className="bg-[#1A1A1A] text-white">Kleinwagen</option>
-                    <option value="Limousine" className="bg-[#1A1A1A] text-white">Limousine</option>
-                    <option value="SUV" className="bg-[#1A1A1A] text-white">SUV</option>
-                    <option value="Kombi" className="bg-[#1A1A1A] text-white">Kombi</option>
-                    <option value="Coupé" className="bg-[#1A1A1A] text-white">Coupé</option>
-                    <option value="Cabrio" className="bg-[#1A1A1A] text-white">Cabrio</option>
-                    <option value="Van" className="bg-[#1A1A1A] text-white">Van</option>
-                  </select>
-                </div>
-
-                {/* Getriebe-Präferenz Radio Buttons */}
-                <div className="space-y-2">
-                  <span className="block text-sm font-bold text-slate-300">Getriebe-Präferenz</span>
-                  <div className="grid grid-cols-3 gap-3">
-                    {["Schaltgetriebe", "Automatik", "egal"].map((option) => (
-                      <label 
-                        key={option} 
-                        className={`border rounded-xl p-3 flex items-center justify-center text-sm font-bold cursor-pointer transition-all duration-200 select-none ${
-                          transmission === option 
-                            ? "border-brand-orange bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange" 
-                            : "border-[#333333] bg-[#1A1A1A] text-slate-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <input 
-                          type="radio" 
-                          name="transmission" 
-                          value={option}
-                          checked={transmission === option}
-                          onChange={() => setTransmission(option)}
-                          className="sr-only"
-                        />
-                        <span className="capitalize">{option}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Antrieb Radio Buttons */}
-                <div className="space-y-2">
-                  <span className="block text-sm font-bold text-slate-300">Antrieb</span>
-                  <div className="grid grid-cols-4 gap-2 sm:gap-3">
-                    {["Frontantrieb", "Heckantrieb", "Allrad", "egal"].map((option) => (
-                      <label 
-                        key={option} 
-                        className={`border rounded-xl py-3 px-1 flex items-center justify-center text-xs sm:text-sm font-bold cursor-pointer transition-all duration-200 select-none ${
-                          drive === option 
-                            ? "border-brand-orange bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange" 
-                            : "border-[#333333] bg-[#1A1A1A] text-slate-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <input 
-                          type="radio" 
-                          name="drive" 
-                          value={option}
-                          checked={drive === option}
-                          onChange={() => setDrive(option)}
-                          className="sr-only"
-                        />
-                        <span className="capitalize text-center">{option}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Weitere Wünsche / Anmerkungen Textarea */}
-                <div className="space-y-1.5">
-                  <label htmlFor="notes-textarea" className="block text-sm font-bold text-slate-300">
-                    Weitere Wünsche / Anmerkungen
-                  </label>
-                  <textarea 
-                    id="notes-textarea"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="z. B. Mindestens 4 Türen, Panoramadach, bevorzugte Farben, Nutzung primär für Langstrecken..."
-                    rows={3}
-                    className="w-full px-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 text-sm font-semibold"
-                    aria-label="Weitere Wünsche oder Anmerkungen"
-                  />
-                </div>
-
-                {/* Deine E-Mail-Adresse */}
-                <div className="space-y-1.5">
-                  <label htmlFor="email-input" className="block text-sm font-bold text-slate-300">
-                    Deine E-Mail-Adresse <span className="text-brand-orange">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                      <Mail className="w-5 h-5" />
-                    </div>
-                    <input 
-                      id="email-input"
-                      type="email" 
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="deine.email@beispiel.de"
-                      className="w-full pl-11 pr-4 py-3 bg-[#1A1A1A] rounded-xl border border-[#333333] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent focus:bg-[#1A1A1A] transition-all duration-200 font-semibold text-sm"
-                      aria-label="Deine E-Mail-Adresse"
-                    />
-                  </div>
-                </div>
-
-                {/* Security and speed notice */}
-                <div className="flex items-center gap-2 text-xs text-slate-400 bg-brand-light/50 p-3 rounded-xl border border-[#333333]">
-                  <Lock className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span className="font-semibold">Deine Daten werden ausschließlich verschlüsselt zur Erstellung der Fahrzeugempfehlung verarbeitet.</span>
-                </div>
-
-                {/* Checkout error banner */}
-                {checkoutError && (
-                  <div className="flex items-start gap-3 p-3 bg-red-950/20 border border-red-900/50 rounded-xl text-red-400 text-xs">
-                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-                    <span className="font-semibold">{checkoutError}</span>
-                  </div>
-                )}
-
-                {/* Submit button */}
-                <div className="pt-2">
-                  <button 
-                    type="submit"
-                    disabled={isSubmitting || !email.trim()}
-                    className="w-full py-4 bg-brand-orange text-white font-bold rounded-xl shadow-lg shadow-brand-orange/20 hover:bg-[#e05621] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-brand-orange focus:ring-offset-2 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer text-base"
-                    aria-label="Beratung für 49 Euro buchen und anfragen"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Weiterleitung zu Stripe...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>49 € bezahlen und Beratung anfragen</span>
-                        <ArrowRight className="w-5 h-5" />
-                      </>
-                    )}
-                  </button>
-                  <p className="text-center text-xs text-slate-400 mt-3 font-semibold">
-                    Du erhältst innerhalb von 48 Stunden 3 Auto-Vorschläge per E-Mail
-                  </p>
-                </div>
-
-              </form>
-            )}
-          </div>
-
-        </div>
-      </section>
-
-      {/* 5. REVIEWS SECTION */}
-      <section 
-        id="reviews" 
-        className="py-20 bg-brand-dark"
-      >
-        <div className="w-full max-w-7xl mx-auto px-4">
-          
-          <div className="text-center space-y-4 max-w-xl mx-auto mb-16">
-            <span className="text-brand-orange font-bold uppercase tracking-wider text-xs">Erfahrungsberichte</span>
-            <h2 className="font-display text-3xl md:text-4xl font-extrabold text-white">
-              Kundenbewertungen
-            </h2>
-            <div className="h-1 w-20 bg-brand-orange rounded mt-3 mx-auto" />
-            <p className="text-slate-400 text-sm md:text-base">
-              Leute aus der Community, die keinen Fehlkauf riskieren wollten — und es nicht bereut haben.
-            </p>
-          </div>
-
-          {/* 3 Review Cards (Row on Desktop, Stacked on Mobile) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            
-            {/* Review 1 */}
-            <div className="bg-brand-light/30 rounded-2xl p-6 border border-[#333333] hover:border-[#444444] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
-              <div className="space-y-4">
-                {/* 5 stars */}
-                <div className="flex text-amber-500">
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                </div>
-                
-                {/* Review Text */}
-                <p className="text-slate-300 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-white font-bold block not-italic mb-1">Endlich keine Angst mehr vor dem Kauf</span>
-                  "Ich hab Timo auf TikTok verfolgt und dann einfach mal die Beratung gebucht. Innerhalb von 24 Stunden hatte ich 3 konkrete Vorschläge mit allem was ich wissen muss. Bin jetzt glücklicher Besitzer eines VW Golf R — und hab dabei noch 1.500 Euro gespart."
-                </p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-[#333333] flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-white text-sm">Mika S.</span>
-                <span>vor 2 Wochen</span>
-              </div>
-            </div>
-
-            {/* Review 2 */}
-            <div className="bg-brand-light/30 rounded-2xl p-6 border border-[#333333] hover:border-[#444444] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
-              <div className="space-y-4">
-                {/* 5 stars */}
-                <div className="flex text-amber-500">
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                </div>
-                
-                {/* Review Text */}
-                <p className="text-slate-300 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-white font-bold block not-italic mb-1">Hat mir echt Nerven gespart</span>
-                  "Ich hatte null Plan welches Auto ich nehmen soll und wollte nicht einfach irgendwas kaufen. Die Empfehlung kam schnell, war super verständlich erklärt und Timo hat genau gewusst worauf ich achten muss. Jetzt fahre ich einen BMW 3er und bereue nichts."
-                </p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-[#333333] flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-white text-sm">Lena K.</span>
-                <span>vor 1 Monat</span>
-              </div>
-            </div>
-
-            {/* Review 3 */}
-            <div className="bg-brand-light/30 rounded-2xl p-6 border border-[#333333] hover:border-[#444444] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
-              <div className="space-y-4">
-                {/* 5 stars */}
-                <div className="flex text-amber-500">
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                  <Star className="w-5 h-5 fill-current" />
-                </div>
-                
-                {/* Review Text */}
-                <p className="text-slate-300 text-sm md:text-base italic leading-relaxed">
-                  <span className="text-white font-bold block not-italic mb-1">49€ die sich mehr als gelohnt haben</span>
-                  "Timos TikToks kenn ich schon lange, aber die Beratung hat nochmal einen draufgesetzt. Er hat mir direkt gesagt welches der drei Autos er selbst nehmen würde und warum. Das ist genau das was man braucht wenn man unsicher ist. Absolute Empfehlung!"
-                </p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-[#333333] flex justify-between items-center text-xs text-slate-500">
-                <span className="font-bold text-white text-sm">Jonas W.</span>
-                <span>vor 3 Wochen</span>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Rating Summary Block */}
-          <div className="mt-12 text-center">
-              <div className="inline-flex flex-col sm:flex-row items-center justify-center gap-3 bg-brand-light/30 border border-[#333333] rounded-2xl p-4 px-6 md:px-8 shadow-sm">
-              <div className="flex items-center gap-1.5 text-amber-500 font-bold text-lg">
-                <Star className="w-5 h-5 fill-current" />
-                <span>4.8 / 5</span>
-              </div>
-              <div className="hidden sm:block w-px h-6 bg-[#333333]" />
-              <div className="text-sm font-semibold text-white">
-                Gesamtbewertung basierend auf 148 Kundenrezensionen in Deutschland
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-        </>
-      )}
-        </main>
-
-      {/* 6. FOOTER (minimal) */}
-      <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-900 mt-auto">
-        <div className="w-full max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6 text-sm">
-          
-          {/* Left: Copyright */}
-          <div className="text-center md:text-left space-y-1">
-            <p className="font-bold text-white text-base tracking-wide uppercase">Timo's Auto-Beratung</p>
-            <p className="text-xs text-slate-500">© 2026 YoTimo Auto-Beratung. Alle Rechte vorbehalten.</p>
-          </div>
-
-          {/* Right: German Links */}
-          <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs md:text-sm font-medium">
-            <button 
-              onClick={() => setActiveModal("impressum")}
-              className="hover:text-brand-orange hover:underline transition-colors cursor-pointer"
-              aria-label="Impressum anzeigen"
-            >
-              Impressum
-            </button>
-            <button 
-              onClick={() => setActiveModal("widerruf")}
-              className="hover:text-brand-orange hover:underline transition-colors cursor-pointer"
-              aria-label="Widerrufsbelehrung anzeigen"
-            >
-              Widerrufsbelehrung
-            </button>
-            <button 
-              onClick={() => setActiveModal("agb")}
-              className="hover:text-brand-orange hover:underline transition-colors cursor-pointer"
-              aria-label="AGB anzeigen"
-            >
-              AGB
-            </button>
-            <button 
-              onClick={() => setActiveModal("datenschutz")}
-              className="hover:text-brand-orange hover:underline transition-colors cursor-pointer"
-              aria-label="Datenschutzerklärung anzeigen"
-            >
-              Datenschutz
-            </button>
-          </nav>
-        </div>
-      </footer>
-      
-      </div>
-
-      {/* INTERACTIVE LEGAL MODAL COMPONENT (Provides professional details on click) */}
-      {activeModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#262626] rounded-2xl border border-[#333333] max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative">
-            
-            {/* Sticky Header */}
-            <div className="sticky top-0 bg-[#111111] border-b border-[#333333] p-5 px-6 flex items-center justify-between z-10">
-              <h4 className="text-xl font-bold text-white uppercase tracking-wide">
-                {activeModal === "impressum" && "Impressum"}
-                {activeModal === "widerruf" && "Widerrufsbelehrung"}
-                {activeModal === "agb" && "Allgemeine Geschäftsbedingungen (AGB)"}
-                {activeModal === "datenschutz" && "Datenschutzerklärung"}
-              </h4>
-              <button 
-                onClick={() => setActiveModal(null)}
-                className="p-1.5 hover:bg-white/5 rounded-full text-slate-400 hover:text-white transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                aria-label="Schließen"
-              >
-                <X className="w-5 h-5 stroke-[2.5]" />
-              </button>
-            </div>
-
-            {/* Modal Body Content (German placeholder legal texts) */}
-            <div className="p-6 px-8 text-sm text-slate-300 space-y-4 leading-relaxed">
-              
+            <div className="p-6 md:p-8 text-sm text-zinc-400 space-y-4 leading-relaxed">
               {activeModal === "impressum" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-white text-base">Angaben gemäß § 5 TMG:</p>
+                  <p className="font-bold text-white">Angaben gemäß § 5 TMG:</p>
                   <p>
                     YoTimo Auto-Beratung<br />
-                    {/* TODO: Echte Adresse hier eintragen */}
+                    {/* TODO: Echte Adresse eintragen */}
                     <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Straße und Hausnummer]</span><br />
                     <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: PLZ und Stadt]</span>
                   </p>
                   <p className="font-semibold text-white">Kontakt:</p>
                   <p>
-                    {/* TODO: Echte Kontaktdaten eintragen */}
                     Telefon: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Telefonnummer]</span><br />
                     E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>
                   </p>
                   <p className="font-semibold text-white">Umsatzsteuer-ID:</p>
-                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: USt-ID]</span></p>
-                  <p className="font-semibold text-white">Berufsbezeichnung &amp; Berufsregeln:</p>
-                  <p>Gewerbeanmeldung nach § 14 GewO erteilt durch die zuständige Gemeinde.</p>
+                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a UStG: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: USt-ID]</span></p>
                   <p className="font-semibold text-white">Redaktionell verantwortlich:</p>
                   <p>Timo (Anschrift wie oben)</p>
                   <p className="font-semibold text-white">Streitschlichtung:</p>
-                  <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://ec.europa.eu/consumers/odr</a>. Zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle sind wir nicht verpflichtet und nicht bereit.</p>
+                  <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://ec.europa.eu/consumers/odr</a>. Zur Teilnahme an einem Streitbeilegungsverfahren sind wir nicht verpflichtet und nicht bereit.</p>
                 </div>
               )}
-
               {activeModal === "widerruf" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-white text-base">Widerrufsbelehrung</p>
+                  <p className="font-bold text-white">Widerrufsbelehrung</p>
                   <p className="font-semibold text-white">Widerrufsrecht</p>
                   <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
-                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Adresse]</span>, E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>) mittels einer eindeutigen Erklärung (z.B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
-                  
+                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Adresse]</span>, E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>) mittels einer eindeutigen Erklärung informieren.</p>
                   <p className="font-semibold text-white">Vorzeitiges Erlöschen des Widerrufsrechts</p>
-                  <p className="bg-[#1A1A1A] p-3 rounded-lg border border-[#333333] italic text-xs text-slate-450">
-                    Besonderer Hinweis: Das Widerrufsrecht erlischt vorzeitig bei einem Vertrag zur Erbringung von Dienstleistungen, wenn wir die Dienstleistung vollständig erbracht haben und mit der Ausführung der Dienstleistung erst begonnen haben, nachdem Sie dazu Ihre ausdrückliche Zustimmung gegeben haben und gleichzeitig Ihre Kenntnis davon bestätigt haben, dass Sie Ihr Widerrufsrecht bei vollständiger Vertragserfüllung durch uns verlieren. Da es sich hier um eine digitale Express-Dienstleistung innerhalb von 48 Stunden handelt, stimmen Sie dieser Ausführung bei Bestellung ausdrücklich zu.
+                  <p className="bg-[#0D0D0D] p-3 rounded-lg border border-[#1E1E1E] italic text-xs text-zinc-500">
+                    Das Widerrufsrecht erlischt vorzeitig bei vollständiger Erbringung der Dienstleistung. Da es sich um eine digitale Express-Dienstleistung innerhalb von 48 Stunden handelt, stimmen Sie dieser Ausführung bei Bestellung ausdrücklich zu.
                   </p>
-
                   <p className="font-semibold text-white">Folgen des Widerrufs</p>
-                  <p>Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von Ihnen erhalten haben, unverzüglich und spätestens binnen vierzehn Tagen ab dem Tag zurückzuzahlen, an dem die Mitteilung über Ihren Widerruf dieses Vertrags bei uns eingegangen ist. Für diese Rückzahlung verwenden wir dasselbe Zahlungsmittel, das Sie bei der ursprünglichen Transaktion eingesetzt haben.</p>
+                  <p>Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen unverzüglich und spätestens binnen vierzehn Tagen zurückzuzahlen.</p>
                 </div>
               )}
-
               {activeModal === "agb" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-white text-base">Allgemeine Geschäftsbedingungen (AGB)</p>
-                  <p className="font-semibold text-white">§ 1 Geltungsbereich und Vertragspartner</p>
-                  <p>Diese AGB gelten für alle Dienstleistungen zwischen YoTimo Auto-Beratung (nachfolgend „Dienstleister“) und dem Kunden. Vertragspartner ist ausschließlich Timo.</p>
-                  
-                  <p className="font-semibold text-white">§ 2 Vertragsgegenstand &amp; Leistungsumfang</p>
-                  <p>Gegenstand des Vertrages ist die herstellerunabhängige Kaufberatung für Kraftfahrzeuge. Der Dienstleister erstellt ein personalisiertes PDF-Dossier mit 3 Fahrzeugvorschlägen auf Basis der vom Kunden übermittelten Angaben. Es handelt sich um ein Dienstleistungsverhältnis, nicht um eine Vermittlung oder Gewährleistung für den tatsächlichen Kaufzustand eines empfohlenen Fahrzeugs.</p>
-                  
-                  <p className="font-semibold text-white">§ 3 Zahlungsbedingungen &amp; Preise</p>
-                  <p>Die angegebenen Preise verstehen sich als Endpreise inklusive der gesetzlichen deutschen Umsatzsteuer. Der Betrag in Höhe von 49 € ist unmittelbar bei Buchung über die bereitgestellten Zahlungsmethoden fällig.</p>
-
-                  <p className="font-semibold text-white">§ 4 Lieferung &amp; Leistungszeit</p>
-                  <p>Die Erstellung und Übersendung der 3 Auto-Vorschläge erfolgt innerhalb von 48 Stunden ab Zahlungseingang und vollständiger Datenübermittlung per E-Mail im PDF-Format.</p>
-
+                  <p className="font-bold text-white">Allgemeine Geschäftsbedingungen (AGB)</p>
+                  <p className="font-semibold text-white">§ 1 Geltungsbereich</p>
+                  <p>Diese AGB gelten für alle Dienstleistungen zwischen YoTimo Auto-Beratung und dem Kunden.</p>
+                  <p className="font-semibold text-white">§ 2 Vertragsgegenstand</p>
+                  <p>Gegenstand ist die herstellerunabhängige Kaufberatung für Kraftfahrzeuge. Der Dienstleister erstellt ein personalisiertes Dossier mit 3 Fahrzeugvorschlägen auf Basis der vom Kunden übermittelten Angaben.</p>
+                  <p className="font-semibold text-white">§ 3 Zahlungsbedingungen</p>
+                  <p>Die Preise verstehen sich als Endpreise inklusive der gesetzlichen Umsatzsteuer. Der Betrag von 49 € ist bei Buchung fällig.</p>
+                  <p className="font-semibold text-white">§ 4 Lieferzeit</p>
+                  <p>Die Übersendung der 3 Auto-Vorschläge erfolgt innerhalb von 48 Stunden ab Zahlungseingang per E-Mail.</p>
                   <p className="font-semibold text-white">§ 5 Haftungsausschluss</p>
-                  <p>Der Dienstleister haftet nicht für Mängel an Fahrzeugen, die der Kunde im Nachgang erwirbt. Alle Empfehlungen stellen unverbindliche subjektive Fachmeinungen dar. Eine physische Begutachtung des Fahrzeugs durch einen zertifizierten Gutachter vor Ort vor Kaufabschluss wird dringend empfohlen.</p>
+                  <p>Der Dienstleister haftet nicht für Mängel an Fahrzeugen, die der Kunde erwirbt. Alle Empfehlungen sind unverbindliche Fachmeinungen. Eine physische Begutachtung vor Kaufabschluss wird empfohlen.</p>
                 </div>
               )}
-
               {activeModal === "datenschutz" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-white text-base">Datenschutzerklärung gemäß DSGVO</p>
+                  <p className="font-bold text-white">Datenschutzerklärung gemäß DSGVO</p>
                   <p className="font-semibold text-white">1. Datenschutz auf einen Blick</p>
-                  <p>Wir nehmen den Schutz Ihrer persönlichen Daten sehr ernst. Personenbezogene Daten werden auf dieser Webseite nur im technisch und organisatorisch notwendigen Umfang verarbeitet (z.B. zur Bereitstellung der Beratung).</p>
-                  
+                  <p>Personenbezogene Daten werden nur im technisch notwendigen Umfang verarbeitet.</p>
                   <p className="font-semibold text-white">2. Datenerhebung bei Auftragsstellung</p>
-                  <p>Wenn Sie eine Beratung anfordern, erheben wir die von Ihnen eingegebenen Daten (Budget, Wunschmarke, Karosserietyp, Getriebeart, Antrieb und Ihre E-Mail-Adresse). Diese Daten werden ausschließlich zur Bearbeitung und Zusendung Ihrer Kaufempfehlungen verwendet und nicht an unbefugte Dritte weitergegeben.</p>
-
-                  <p className="font-semibold text-white">3. Ihre Rechte (Auskunft, Löschung, Sperrung)</p>
-                  <p>Sie haben jederzeit das Recht auf unentgeltliche Auskunft über Ihre gespeicherten personenbezogenen Daten, deren Herkunft und Empfänger und den Zweck der Datenverarbeitung sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Schreiben Sie uns dazu einfach eine E-Mail an: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: datenschutz@email.de]</span></p>
-
+                  <p>Bei einer Beratungsanfrage erheben wir Budget, Wunschmarke, Karosserietyp, Getriebeart, Antrieb und Ihre E-Mail. Diese Daten werden ausschließlich zur Bearbeitung Ihrer Empfehlungen verwendet.</p>
+                  <p className="font-semibold text-white">3. Ihre Rechte</p>
+                  <p>Sie haben jederzeit das Recht auf Auskunft, Berichtigung und Löschung Ihrer gespeicherten Daten. Schreiben Sie uns an: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: datenschutz@email.de]</span></p>
                   <p className="font-semibold text-white">4. Datensicherheit</p>
-                  <p>Ihre Daten werden über eine verschlüsselte SSL-Verbindung (HTTPS) übertragen, um unberechtigte Zugriffe Dritter bestmöglich zu verhindern.</p>
+                  <p>Ihre Daten werden über eine verschlüsselte SSL-Verbindung (HTTPS) übertragen.</p>
                 </div>
               )}
-
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-5 px-6 border-t border-[#333333] flex justify-end">
-              <button 
-                onClick={() => setActiveModal(null)}
-                className="px-5 py-2.5 bg-brand-orange hover:bg-[#e05621] text-white font-bold rounded-xl transition-all duration-200 cursor-pointer"
-              >
+            <div className="px-6 py-4 border-t border-[#1A1A1A] flex justify-end">
+              <button onClick={() => setActiveModal(null)} className="px-5 py-2.5 bg-brand-orange hover:bg-[#e05621] text-white font-bold rounded-lg transition-colors cursor-pointer">
                 Schließen
               </button>
             </div>
-
           </div>
         </div>
       )}
