@@ -538,24 +538,24 @@ export default function App() {
                 Bekannt von TikTok:
               </h3>
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                 {/* TikTok Card */}
                 <a 
                   href="https://tiktok.com/@yotimoo1" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 sm:gap-2 md:gap-4 p-3 sm:p-2 md:p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
+                  className="flex items-center gap-3 md:gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
                   aria-label="Besuche Timo auf TikTok"
                 >
-                  <div className="w-10 h-10 sm:w-9 sm:h-9 md:w-12 md:h-12 bg-slate-900 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
                     {/* Custom TikTok SVG since standard Lucide does not include it */}
-                    <svg className="w-4.5 h-4.5 sm:w-4 sm:h-4 md:w-5 md:h-5 fill-current" viewBox="0 0 24 24">
+                    <svg className="w-4.5 h-4.5 md:w-5 md:h-5 fill-current" viewBox="0 0 24 24">
                       <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.02 1.63 4.15 1.02.99 2.44 1.5 3.86 1.59v3.86a9.14 9.14 0 0 1-5.23-1.61v7.62c0 3.66-2.58 6.84-6.17 7.37-4.02.6-7.8-2.1-8.38-6.12-.58-4.02 2.12-7.8 6.13-8.38 1.05-.15 2.12-.04 3.12.32V0zm-3.9 11.23c-2.31-.05-4.28 1.74-4.4 4.05-.12 2.31 1.65 4.31 3.96 4.43 2.31.12 4.31-1.65 4.43-3.96v-.32H11.2c-.08 1.4-1.27 2.47-2.67 2.39-1.4-.08-2.47-1.27-2.39-2.67.08-1.4 1.27-2.47 2.67-2.39v-1.53z"/>
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm sm:text-xs md:text-sm lg:text-base text-white group-hover:text-brand-orange transition-colors truncate">TikTok</p>
-                    <p className="text-xs sm:text-[10px] md:text-xs text-slate-400 truncate" title="400k+ Follower">400k+ Follower</p>
+                    <p className="font-bold text-sm md:text-base text-white group-hover:text-brand-orange transition-colors truncate" title="TikTok">TikTok</p>
+                    <p className="text-xs text-slate-400 truncate" title="400k+ Follower">400k+ Follower</p>
                   </div>
                 </a>
 
@@ -564,15 +564,15 @@ export default function App() {
                   href="https://instagram.com/yotimoo1" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 sm:gap-2 md:gap-4 p-3 sm:p-2 md:p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
+                  className="flex items-center gap-3 md:gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
                   aria-label="Besuche Timo auf Instagram"
                 >
-                  <div className="w-10 h-10 sm:w-9 sm:h-9 md:w-12 md:h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
-                    <Instagram className="w-5 h-5 sm:w-4.5 sm:h-4.5 md:w-6 md:h-6 stroke-[2]" />
+                  <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                    <Instagram className="w-5 h-5 md:w-6 md:h-6 stroke-[2]" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm sm:text-xs md:text-sm lg:text-base text-white group-hover:text-brand-orange transition-colors truncate">Instagram</p>
-                    <p className="text-xs sm:text-[10px] md:text-xs text-slate-400 truncate" title="@yotimoo1">@yotimoo1</p>
+                    <p className="font-bold text-sm md:text-base text-white group-hover:text-brand-orange transition-colors truncate" title="Instagram">Instagram</p>
+                    <p className="text-xs text-slate-400 truncate" title="@yotimoo1">@yotimoo1</p>
                   </div>
                 </a>
 
@@ -581,15 +581,15 @@ export default function App() {
                   href="https://enricha.de/products/tiktok-anleitung-2025"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 sm:gap-2 md:gap-4 p-3 sm:p-2 md:p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
+                  className="flex items-center gap-3 md:gap-4 p-3 rounded-xl bg-brand-light hover:bg-[#2E2E2E] transition-colors border border-transparent hover:border-[#333333] group min-w-0"
                   aria-label="Timocar auf Enricha"
                 >
-                  <div className="w-10 h-10 sm:w-9 sm:h-9 md:w-12 md:h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-[#1A1A1A] border border-[#333333] flex items-center justify-center p-2 sm:p-1.5 md:p-2">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden shrink-0 shadow-md group-hover:scale-105 transition-transform bg-[#1A1A1A] border border-[#333333] flex items-center justify-center p-2">
                     <img src="/enricha.png" alt="Enricha" className="w-full h-full object-contain" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm sm:text-xs md:text-sm lg:text-base text-white group-hover:text-brand-orange transition-colors truncate">Enricha</p>
-                    <p className="text-xs sm:text-[10px] md:text-xs text-slate-400 truncate" title="TikTok Kurs">TikTok Kurs</p>
+                    <p className="font-bold text-sm md:text-base text-white group-hover:text-brand-orange transition-colors truncate" title="Enricha">Enricha</p>
+                    <p className="text-xs text-slate-400 truncate" title="TikTok Kurs">TikTok Kurs</p>
                   </div>
                 </a>
               </div>
@@ -740,7 +740,7 @@ export default function App() {
                 </div>
 
                 {/* 4-Column Spec Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   
                   {/* Card 1: Leistung */}
                   <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors">
@@ -778,11 +778,11 @@ export default function App() {
                   {/* Card 4: Bekannte Mängel */}
                   <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-start gap-2.5 hover:bg-white/10 transition-colors min-w-0">
                     <div className="flex items-center justify-between text-slate-400 gap-2 min-w-0">
-                      <span className="text-xs font-semibold tracking-wider uppercase truncate">Bekannte Mängel</span>
+                      <span className="text-xs font-semibold tracking-wider uppercase">Bekannte Mängel</span>
                       <AlertTriangle className="w-5 h-5 text-brand-orange shrink-0" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-white break-words" title={analyzedCar.maengel}>
+                      <p className="text-lg font-bold text-white break-words" title={analyzedCar.maengel}>
                         {analyzedCar.maengel.split(",")[0]}
                       </p>
                     </div>
