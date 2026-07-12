@@ -32,6 +32,67 @@ for (const key of REQUIRED_ENV) {
 }
 
 // ─────────────────────────────────────────────
+//  Return-URL resolution (with strict allowlist)
+//
+//  Priority:
+//    1. process.env.APP_URL          (custom production domain override)
+//    2. https://${VERCEL_URL}        (Vercel-provided, trusted by Vercel proxy)
+//    3. Request-Origin (host header)  (only if it passes allowlist)
+//
+//  Allowlist (whitelist):
+//    - *.vercel.app                  (Vercel preview/production)
+//    - hosts listed in ALLOWED_HOSTS env (comma-separated; production domains)
+//
+//  We NEVER trust arbitrary request headers without allowlist match.
+// ─────────────────────────────────────────────
+const ALLOWED_VERCEL_PATTERN = /\.vercel\.app$/i;
+const ALLOWED_HOSTS: ReadonlySet<string> = new Set(
+  (process.env.ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isHostAllowed(host: string): boolean {
+  const h = host.toLowerCase().split(":")[0]; // strip port
+  if (!h) return false;
+  if (ALLOWED_VERCEL_PATTERN.test(h)) return true;
+  if (ALLOWED_HOSTS.has(h)) return true;
+  return false;
+}
+
+function getAppOrigin(req: Request): string {
+  // 1. Explicit override (only if it parses as a valid https URL)
+  const envUrl = process.env.APP_URL?.trim();
+  if (envUrl) {
+    try {
+      const u = new URL(envUrl);
+      if (u.protocol === "https:" || u.protocol === "http:") {
+        return `${u.protocol}//${u.host}`;
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 2. Vercel-provided URL (trusted — set by Vercel proxy on every request)
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  // 3. Request-Origin (only if host passes allowlist)
+  const xfHost = (req.headers["x-forwarded-host"] as string) || "";
+  const host = (req.headers["host"] as string) || "";
+  const xfProto = (req.headers["x-forwarded-proto"] as string) || "https";
+  const candidateHost = (xfHost || host).toLowerCase().split(":")[0];
+
+  if (candidateHost && isHostAllowed(candidateHost)) {
+    return `${xfProto}://${candidateHost}`;
+  }
+
+  // 4. Nothing allowed — empty string. Callers must handle this.
+  return "";
+}
+
+// ─────────────────────────────────────────────
 //  Clients
 // ─────────────────────────────────────────────
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -541,7 +602,13 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
     return;
   }
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  // App-Origin via allowlist (APP_URL → VERCEL_URL → request host)
+  const appUrl = getAppOrigin(req);
+  if (!appUrl) {
+    console.error("❌ getAppOrigin returned empty — kein erlaubter Host. ALLOWED_HOSTS env prüfen.");
+    res.status(500).json({ error: "Server-Konfigurationsfehler: App-Origin konnte nicht ermittelt werden." });
+    return;
+  }
   // CHECKOUT_MODE steuert Hosted vs. Embedded. Default: hosted.
   const checkoutMode = (process.env.CHECKOUT_MODE === "embedded" ? "embedded" : "hosted") as "hosted" | "embedded";
   const safeSource = sanitizeSource(effectiveSource);
