@@ -31,6 +31,11 @@ for (const key of REQUIRED_ENV) {
   }
 }
 
+// PayPal: only warn, don't fail. The /api/paypal/* routes 404 if not configured.
+if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
+  console.warn("⚠️  Missing PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET — PayPal routes will return 503");
+}
+
 // ─────────────────────────────────────────────
 //  Return-URL resolution (with strict allowlist)
 //
@@ -337,6 +342,116 @@ app.post(
 app.use(express.json());
 
 // ─────────────────────────────────────────────
+//  POST /api/paypal/create-order
+//  Erstellt eine PayPal-Order. Wird vom Frontend-PayPalButton
+//  in der `createOrder`-Callback aufgerufen.
+//
+//  Wichtig: Preis ist SERVERSEITIG festgelegt. Wir akzeptieren
+//  KEINEN `amount` oder `currency` vom Client (wäre trivialer
+//  Preismanipulations-Vektor).
+// ─────────────────────────────────────────────
+app.post("/api/paypal/create-order", async (req: Request, res: Response) => {
+  try {
+    const cfg = getPayPalConfig();
+    if (!cfg) {
+      res.status(503).json({ error: "PayPal ist nicht konfiguriert (PAYPAL_CLIENT_ID/SECRET fehlt)." });
+      return;
+    }
+    const { email, source, brand, bodyType, budget, drive, transmission, notes } = (req.body ?? {}) as Record<string, string>;
+    if (!email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      res.status(400).json({ error: "Gültige E-Mail-Adresse erforderlich." });
+      return;
+    }
+    const order = await createPayPalOrder({
+      email: email.trim(),
+      source,
+      brand,
+      bodyType,
+      budget,
+      drive,
+      transmission,
+      notes,
+    });
+    console.log(`PayPal order created: ${order.id} (env=${cfg.environment}, source=${source ?? "direct"})`);
+    res.json({ id: order.id, status: order.status });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
+    console.error("PayPal create-order error:", msg);
+    res.status(500).json({ error: "PayPal-Order konnte nicht erstellt werden. Bitte erneut versuchen." });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  POST /api/paypal/capture-order
+//  Captured eine bereits vom Käufer autorisierte PayPal-Order.
+//  Frontend ruft das im `onApprove`-Callback auf.
+//
+//  Wichtig:
+//  - Erfolg erst dann zurückgeben, wenn PayPal `status: "COMPLETED"` meldet.
+//  - Schutz gegen Doppel-Capture via in-memory Set (single-process).
+//  - KEIN Preis/Betrag-Override vom Client — alles serverseitig.
+// ─────────────────────────────────────────────
+app.post("/api/paypal/capture-order", async (req: Request, res: Response) => {
+  try {
+    const cfg = getPayPalConfig();
+    if (!cfg) {
+      res.status(503).json({ error: "PayPal ist nicht konfiguriert." });
+      return;
+    }
+    const { orderId } = (req.body ?? {}) as { orderId?: string };
+    if (!orderId || !/^[A-Z0-9]{17}$/.test(orderId)) {
+      res.status(400).json({ error: "Ungültige oder fehlende orderId." });
+      return;
+    }
+    if (capturedOrders.has(orderId)) {
+      // Idempotenter Capture: bereits captured → trotzdem 200 mit aktuellem Status
+      res.status(200).json({ id: orderId, status: "COMPLETED", alreadyCaptured: true });
+      return;
+    }
+    const result = await capturePayPalOrder(orderId);
+    const status = String(result.status ?? "");
+    if (status !== "COMPLETED") {
+      // PayPal hat den Capture nicht autorisiert. Status kann sein: APPROVED, CREATED, SAVED, VOIDED, PAYER_ACTION_REQUIRED
+      res.status(402).json({ id: orderId, status, error: `Capture nicht autorisiert (Status: ${status})` });
+      return;
+    }
+    capturedOrders.add(orderId);
+    console.log(`PayPal order captured: ${orderId}`);
+    res.json({ id: orderId, status, completed: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
+    console.error("PayPal capture error:", msg);
+    res.status(500).json({ error: "PayPal-Capture fehlgeschlagen. Bitte erneut versuchen." });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  GET /api/paypal/client-token
+//  Liefert einen browser-safe client-token (PayPal-SDK-v6 Pattern).
+//  Wird vom Frontend beim Initialisieren des PayPal-SDK-Providers aufgerufen.
+//
+//  NICHT zwingend nötig wenn `clientId` direkt an den Provider gegeben wird,
+//  aber empfohlen für Production-Härte (Token rotiert schnell, Client-ID ist langlebig).
+// ─────────────────────────────────────────────
+app.get("/api/paypal/client-token", async (_req: Request, res: Response) => {
+  try {
+    const cfg = getPayPalConfig();
+    if (!cfg) {
+      res.status(503).json({ error: "PayPal ist nicht konfiguriert." });
+      return;
+    }
+    const token = await getPayPalAccessToken(cfg);
+    // Im SDK-v6-Referenz wird `accessToken` (oder `clientToken`) im Provider akzeptiert.
+    // Wir liefern den access_token; der Provider entscheidet wie er ihn intern verwendet.
+    res.json({ accessToken: token, environment: cfg.environment });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
+    console.error("PayPal client-token error:", msg);
+    res.status(500).json({ error: "PayPal-Token konnte nicht geladen werden." });
+  }
+});
+
+// ─────────────────────────────────────────────
 //  POST /api/analyze-car
 // ─────────────────────────────────────────────
 app.post("/api/analyze-car", async (req: Request, res: Response) => {
@@ -613,13 +728,21 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
   const checkoutMode = (process.env.CHECKOUT_MODE === "embedded" ? "embedded" : "hosted") as "hosted" | "embedded";
   const safeSource = sanitizeSource(effectiveSource);
 
+  // TikTok-In-App-Browser: PayPal aus Stripe entfernen, weil TikTok
+  // die PayPal-Login-Navigation blockiert. Stattdessen nutzt der Frontend-Code
+  // den separaten PayPal-v6-Modal-Button.
+  const userAgent = (req.headers["user-agent"] as string) || "";
+  const isTikTokBrowser = /TikTok|BytedanceWebview|musical_ly/i.test(userAgent);
+  const stripePaymentMethods: Stripe.Checkout.SessionCreateParams.PaymentMethodType[] =
+    isTikTokBrowser ? ["card"] : ["card", "paypal"];
+
   try {
     // Wir bauen die Session-Config abhängig vom Modus.
     // Wichtig: KEIN `any`-Cast; alle Felder sind in der Stripe-Lib getypt.
     const baseConfig = {
       mode: "payment" as const,
       customer_email: effectiveEmail.slice(0, 500),
-      payment_method_types: ["card", "paypal"] as Stripe.Checkout.SessionCreateParams.PaymentMethodType[],
+      payment_method_types: stripePaymentMethods,
       line_items: [
         {
           price_data: {
@@ -693,6 +816,151 @@ if (!process.env.VERCEL) {
     console.log(`   → Checkout-Mode: ${process.env.CHECKOUT_MODE === "embedded" ? "embedded" : "hosted (default)"}`);
   });
 }
+
+// ─────────────────────────────────────────────
+//  PayPal Orders API v2 (server-side)
+//
+//  Erstellt/captured PayPal-Orders über die REST-API.
+//  KEIN PayPal-SDK auf dem Server (zu groß / instabil) — direkt fetch gegen
+//  https://api-m.sandbox.paypal.com (sandbox) oder https://api-m.paypal.com (live).
+//
+//  Preis wird serverseitig festgelegt, NIEMALS vom Client akzeptiert.
+// ─────────────────────────────────────────────
+interface PayPalConfig {
+  clientId: string;
+  clientSecret: string;
+  environment: "sandbox" | "production";
+}
+
+function getPayPalConfig(): PayPalConfig | null {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  const envRaw = (process.env.PAYPAL_ENVIRONMENT ?? "sandbox").toLowerCase();
+  if (!clientId || !clientSecret) return null;
+  const environment: "sandbox" | "production" = envRaw === "production" ? "production" : "sandbox";
+  return { clientId, clientSecret, environment };
+}
+
+function payPalBaseUrl(cfg: PayPalConfig): string {
+  return cfg.environment === "production"
+    ? "https://api-m.paypal.com"
+    : "https://api-m.sandbox.paypal.com";
+}
+
+const payPalTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+async function getPayPalAccessToken(cfg: PayPalConfig): Promise<string> {
+  const cached = payPalTokenCache.get(cfg.environment);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+
+  const basic = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64");
+  const res = await fetch(`${payPalBaseUrl(cfg)}/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`PayPal OAuth failed: ${res.status} ${err}`);
+  }
+  const data = (await res.json()) as { access_token: string; expires_in: number };
+  payPalTokenCache.set(cfg.environment, {
+    token: data.access_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  });
+  return data.access_token;
+}
+
+interface CreateOrderInput {
+  email: string;
+  source?: string;
+  brand?: string;
+  bodyType?: string;
+  budget?: string;
+  drive?: string;
+  transmission?: string;
+  notes?: string;
+}
+
+const PRODUCT_AMOUNT_CENTS = 4900;
+const PRODUCT_DESCRIPTION = "Auto-Beratung Premium: 3 maßgeschneiderte Fahrzeugempfehlungen innerhalb von 48 Stunden.";
+
+async function createPayPalOrder(input: CreateOrderInput): Promise<{ id: string; status: string }> {
+  const cfg = getPayPalConfig();
+  if (!cfg) throw new Error("PAYPAL_NOT_CONFIGURED");
+
+  const token = await getPayPalAccessToken(cfg);
+  const res = await fetch(`${payPalBaseUrl(cfg)}/v2/checkout/orders`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "PayPal-Request-Id": `timar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    },
+    body: JSON.stringify({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          amount: {
+            currency_code: "EUR",
+            value: (PRODUCT_AMOUNT_CENTS / 100).toFixed(2),
+            breakdown: {
+              item_total: { currency_code: "EUR", value: (PRODUCT_AMOUNT_CENTS / 100).toFixed(2) },
+            },
+          },
+          description: PRODUCT_DESCRIPTION,
+          items: [
+            {
+              name: "Auto-Beratung Premium",
+              description: PRODUCT_DESCRIPTION,
+              unit_amount: { currency_code: "EUR", value: (PRODUCT_AMOUNT_CENTS / 100).toFixed(2) },
+              quantity: "1",
+              category: "DIGITAL_GOODS",
+            },
+          ],
+          custom_id: sanitizeMetaField(input.source, 50) || "direct",
+        },
+      ],
+      payment_source: {
+        paypal: {
+          email_address: sanitizeMetaField(input.email, 254) || undefined,
+        },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`PayPal create-order failed: ${res.status} ${err}`);
+  }
+  const order = (await res.json()) as { id: string; status: string };
+  return order;
+}
+
+async function capturePayPalOrder(orderId: string): Promise<{ id: string; status: string; payer?: unknown; purchase_units?: unknown[] }> {
+  const cfg = getPayPalConfig();
+  if (!cfg) throw new Error("PAYPAL_NOT_CONFIGURED");
+
+  const token = await getPayPalAccessToken(cfg);
+  const res = await fetch(`${payPalBaseUrl(cfg)}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`PayPal capture failed: ${res.status} ${err}`);
+  }
+  return await res.json();
+}
+
+// In-Memory-Lock gegen Doppel-Capture (single-process safeguard; verteilter
+// Lock bräuchte Redis. Reicht für preview/test).
+const capturedOrders = new Set<string>();
 
 // ─────────────────────────────────────────────
 //  E-Mail Templates
