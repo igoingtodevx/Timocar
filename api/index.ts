@@ -650,7 +650,7 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
     if (checkoutMode === "embedded") {
       session = await getStripe().checkout.sessions.create({
         ...baseConfig,
-        ui_mode: "embedded" as Stripe.Checkout.SessionCreateParams.UiMode,
+        ui_mode: "embedded_page" as Stripe.Checkout.SessionCreateParams.UiMode,
         return_url: `${appUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       });
     } else {
