@@ -2,9 +2,12 @@
  * Auto-Beratung Premium — Express Backend (Vercel Serverless Compatible)
  *
  * Endpoints:
- *   POST /api/analyze-car      → Gemini + Google Search Grounding
- *   POST /api/create-checkout  → Stripe Checkout Session (49€)
- *   POST /api/stripe-webhook   → Stripe Webhook → E-Mail an Owner
+ *   POST /api/analyze-car        → Gemini + Google Search Grounding
+ *   POST /api/create-checkout    → Stripe Checkout Session (49€)
+ *                                  Mode: "hosted" (default) oder "embedded" (via VITE_CHECKOUT_MODE)
+ *   POST /api/stripe-webhook     → Stripe Webhook → E-Mail an Owner
+ *   POST /api/checkout-draft     → Temporären Form-Draft speichern (für Browser-Wechsel)
+ *   GET  /api/checkout-draft/:t  → Draft einmalig laden
  */
 
 import express, { Request, Response } from "express";
@@ -13,6 +16,7 @@ import Stripe from "stripe";
 import nodemailer from "nodemailer";
 import "dotenv/config";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,9 +33,6 @@ for (const key of REQUIRED_ENV) {
 
 // ─────────────────────────────────────────────
 //  Clients
-//  Lazy init: Stripe / Nodemailer erst bei Bedarf instanziieren, damit
-//  das Modul nicht beim Import crasht, wenn ein Env-Var fehlt (sonst wirft
-//  Vercel Serverless "FUNCTION_INVOCATION_FAILED" und kein Endpoint antwortet).
 // ─────────────────────────────────────────────
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -94,12 +95,76 @@ function setCache(key: string, data: unknown) {
 }
 
 // ─────────────────────────────────────────────
+//  Checkout Drafts (for browser-switch recovery)
+//
+//  Wird benutzt, wenn ein User im TikTok In-App-Browser auf
+//  "Im Browser öffnen" tippt und im echten Browser landet.
+//  Statt Formularwerte in die URL zu schreiben (DSGVO/Sicherheit),
+//  speichern wir sie serverseitig mit einem opaque token.
+//
+//  • TTL: 30 min (User sollte innerhalb dieser Zeit wechseln)
+//  • Single-use optional über `consume: true`
+//  • Rate-Limit pro IP: 5 Drafts / 10 min
+//  • Daten werden NICHT ins Stripe-Metadata übertragen
+//    (User muss sie im neuen Browser nochmal abschicken)
+// ─────────────────────────────────────────────
+interface CheckoutDraft {
+  email: string;
+  budget: string;
+  brand: string;
+  bodyType: string;
+  transmission: string;
+  drive: string;
+  notes: string;
+  source: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+const draftStore = new Map<string, CheckoutDraft>();
+const DRAFT_TTL_MS = 30 * 60_000;
+const DRAFT_RATE_LIMIT = 5;
+const DRAFT_RATE_WINDOW_MS = 10 * 60_000;
+const draftRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function checkDraftRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = draftRateLimit.get(ip);
+  if (!entry || now > entry.resetAt) {
+    draftRateLimit.set(ip, { count: 1, resetAt: now + DRAFT_RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= DRAFT_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
+function cleanupDrafts() {
+  const now = Date.now();
+  for (const [token, draft] of draftStore.entries()) {
+    if (now > draft.expiresAt) draftStore.delete(token);
+  }
+}
+
+function generateOpaqueToken(): string {
+  // 32 Bytes hex = 64 chars; kryptografisch zufällig, nicht erratbar
+  return crypto.randomBytes(32).toString("hex");
+}
+
+const ALLOWED_SOURCES = new Set(["direct", "tiktok", "instagram", "youtube", "linktree", "other"]);
+
+function sanitizeSource(input: unknown): string {
+  const s = typeof input === "string" ? input.toLowerCase().slice(0, 50) : "direct";
+  return ALLOWED_SOURCES.has(s) ? s : "direct";
+}
+
+function sanitizeMetaField(value: unknown, maxLen: number): string {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maxLen);
+}
+
+// ─────────────────────────────────────────────
 //  App Setup
-// ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
-//  Exa Grounding (kostenloses Web-Search-Grounding)
-//  Zwei gezielte Queries: Technik-Specs + bekannte Mängel/Schwachstellen.
-//  Mängel sind das wichtigste Feature → eigene, fokussierte Recherche.
 // ─────────────────────────────────────────────
 async function exaSearch(query: string, n: number): Promise<string[]> {
   const key = process.env.EXA_API_KEY;
@@ -132,9 +197,7 @@ async function getExaContext(vehicle: string): Promise<string> {
     console.warn("⚠️ EXA_API_KEY fehlt — kein Grounding möglich");
     return "";
   }
-  // Specs-Recherche (Leistung, Verbrauch, Wertverlust)
   const specQuery = `${vehicle} technische Daten Leistung PS kW Verbrauch Wertverlust`;
-  // Mängel-Recherche (eigenständig, damit die echten Schwachstellen rankommen)
   const flawQuery = `${vehicle} bekannte Mängel Schwachstellen typische Probleme Ausfälle Forum Rückruf`;
 
   const [specs, flaws] = await Promise.allSettled([
@@ -226,7 +289,6 @@ app.post("/api/analyze-car", async (req: Request, res: Response) => {
 
   const normalizedQuery = query.trim().toLowerCase().slice(0, 200);
 
-  // Exa-Grounding: aktuelle Web-Auszüge holen und in die Analyse einbetten
   let exaContext = "";
   try {
     exaContext = await getExaContext(query.trim());
@@ -312,7 +374,6 @@ Wichtig:
       return;
     }
 
-    // Robust: erstes {...}-Block extrahieren (greedy auf äußere Klammern)
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("Gemini returned non-JSON:", rawText.slice(0, 300));
@@ -348,10 +409,96 @@ Wichtig:
 });
 
 // ─────────────────────────────────────────────
+//  POST /api/checkout-draft
+//
+//  Speichert Formularwerte serverseitig mit TTL + opaque token.
+//  Zweck: User wechselt von TikTok In-App-Browser in echten Browser,
+//  kann dort mit dem Token die Werte wiederherstellen.
+// ─────────────────────────────────────────────
+app.post("/api/checkout-draft", (req: Request, res: Response) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+
+  if (!checkDraftRateLimit(ip)) {
+    res.status(429).json({ error: "Zu viele Draft-Anfragen. Bitte versuche es später erneut." });
+    return;
+  }
+
+  const { email, budget, brand, bodyType, transmission, drive, notes, source } = req.body as Record<string, unknown>;
+
+  // Email ist Pflicht, weil das die Kern-Identifikation ist
+  if (typeof email !== "string" || !email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    res.status(400).json({ error: "Gültige E-Mail-Adresse erforderlich." });
+    return;
+  }
+
+  cleanupDrafts();
+
+  const token = generateOpaqueToken();
+  const now = Date.now();
+  const draft: CheckoutDraft = {
+    email: sanitizeMetaField(email, 500),
+    budget: sanitizeMetaField(budget, 100),
+    brand: sanitizeMetaField(brand, 100),
+    bodyType: sanitizeMetaField(bodyType, 100),
+    transmission: sanitizeMetaField(transmission, 100),
+    drive: sanitizeMetaField(drive, 100),
+    notes: sanitizeMetaField(notes, 500),
+    source: sanitizeSource(source),
+    createdAt: now,
+    expiresAt: now + DRAFT_TTL_MS,
+  };
+  draftStore.set(token, draft);
+
+  res.json({ token, expiresAt: draft.expiresAt });
+});
+
+// ─────────────────────────────────────────────
+//  GET /api/checkout-draft/:token
+//
+//  Lädt einen Draft einmalig. Single-use, damit Token nicht
+//  im Browser-Verlauf oder in Server-Logs wiederverwendet werden kann.
+// ─────────────────────────────────────────────
+app.get("/api/checkout-draft/:token", (req: Request, res: Response) => {
+  const token = String(req.params.token ?? "");
+  if (!/^[a-f0-9]{64}$/.test(token)) {
+    res.status(400).json({ error: "Ungültiger Token." });
+    return;
+  }
+
+  cleanupDrafts();
+  const draft = draftStore.get(token);
+  if (!draft) {
+    res.status(404).json({ error: "Draft nicht gefunden oder abgelaufen." });
+    return;
+  }
+
+  // Single-use: nach Lesen löschen
+  draftStore.delete(token);
+
+  res.json({
+    email: draft.email,
+    budget: draft.budget,
+    brand: draft.brand,
+    bodyType: draft.bodyType,
+    transmission: draft.transmission,
+    drive: draft.drive,
+    notes: draft.notes,
+    source: draft.source,
+  });
+});
+
+// ─────────────────────────────────────────────
 //  POST /api/create-checkout
+//
+//  Mode wird per Env-Var CHECKOUT_MODE gesteuert (für Preview-Tests).
+//  "hosted" (default) → Top-Level-Redirect (Original-Verhalten)
+//  "embedded" → Stripe Embedded Checkout (TikTok-safe)
+//
+//  Bei "embedded" wird KEIN Top-Level-Redirect gemacht; der Client
+//  bekommt client_secret und mounted das EmbeddedCheckout-iframe inline.
 // ─────────────────────────────────────────────
 app.post("/api/create-checkout", async (req: Request, res: Response) => {
-  const { budget, brand, bodyType, transmission, drive, notes, email } = req.body as {
+  const { budget, brand, bodyType, transmission, drive, notes, email, source, draftToken } = req.body as {
     budget?: string;
     brand?: string;
     bodyType?: string;
@@ -359,20 +506,53 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
     drive?: string;
     notes?: string;
     email?: string;
+    source?: string;
+    draftToken?: string;
   };
 
-  if (!email?.trim()) {
+  // Wenn draftToken mitgeschickt wird, lade die echten Werte daraus
+  let effectiveEmail = email?.trim() ?? "";
+  let effectiveBudget = budget;
+  let effectiveBrand = brand;
+  let effectiveBodyType = bodyType;
+  let effectiveTransmission = transmission;
+  let effectiveDrive = drive;
+  let effectiveNotes = notes;
+  let effectiveSource: string | undefined = source;
+
+  if (draftToken && /^[a-f0-9]{64}$/.test(draftToken)) {
+    const draft = draftStore.get(draftToken);
+    if (draft) {
+      // Single-use bei Draft-Load im Checkout
+      draftStore.delete(draftToken);
+      effectiveEmail = draft.email;
+      effectiveBudget = draft.budget || budget;
+      effectiveBrand = draft.brand || brand;
+      effectiveBodyType = draft.bodyType || bodyType;
+      effectiveTransmission = draft.transmission || transmission;
+      effectiveDrive = draft.drive || drive;
+      effectiveNotes = draft.notes || notes;
+      effectiveSource = effectiveSource ?? draft.source;
+    }
+  }
+
+  if (!effectiveEmail) {
     res.status(400).json({ error: "E-Mail-Adresse ist erforderlich." });
     return;
   }
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  // CHECKOUT_MODE steuert Hosted vs. Embedded. Default: hosted.
+  const checkoutMode = (process.env.CHECKOUT_MODE === "embedded" ? "embedded" : "hosted") as "hosted" | "embedded";
+  const safeSource = sanitizeSource(effectiveSource);
 
   try {
-    const session = await getStripe().checkout.sessions.create({
-      payment_method_types: ["card", "paypal"],
-      mode: "payment",
-      customer_email: email.trim(),
+    // Wir bauen die Session-Config abhängig vom Modus.
+    // Wichtig: KEIN `any`-Cast; alle Felder sind in der Stripe-Lib getypt.
+    const baseConfig = {
+      mode: "payment" as const,
+      customer_email: effectiveEmail.slice(0, 500),
+      payment_method_types: ["card", "paypal"] as Stripe.Checkout.SessionCreateParams.PaymentMethodType[],
       line_items: [
         {
           price_data: {
@@ -387,19 +567,41 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
         },
       ],
       metadata: {
-        email: email.trim().slice(0, 500),
-        budget: budget?.trim().slice(0, 100) ?? "",
-        brand: brand?.trim().slice(0, 100) ?? "",
-        bodyType: bodyType?.trim().slice(0, 100) ?? "",
-        transmission: transmission?.trim().slice(0, 100) ?? "",
-        drive: drive?.trim().slice(0, 100) ?? "",
-        notes: notes?.trim().slice(0, 500) ?? "",
+        // Felder werden serverseitig begrenzt (max-Längen) bevor sie in Stripe landen
+        email: sanitizeMetaField(effectiveEmail, 500),
+        budget: sanitizeMetaField(effectiveBudget, 100),
+        brand: sanitizeMetaField(effectiveBrand, 100),
+        bodyType: sanitizeMetaField(effectiveBodyType, 100),
+        transmission: sanitizeMetaField(effectiveTransmission, 100),
+        drive: sanitizeMetaField(effectiveDrive, 100),
+        notes: sanitizeMetaField(effectiveNotes, 500),
+        source: safeSource,
       },
-      success_url: `${appUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/?payment=cancelled`,
-    });
+    };
 
-    res.json({ url: session.url });
+    let session: Stripe.Checkout.Session;
+    if (checkoutMode === "embedded") {
+      session = await getStripe().checkout.sessions.create({
+        ...baseConfig,
+        ui_mode: "embedded" as Stripe.Checkout.SessionCreateParams.UiMode,
+        return_url: `${appUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      });
+    } else {
+      session = await getStripe().checkout.sessions.create({
+        ...baseConfig,
+        success_url: `${appUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/?payment=cancelled`,
+      });
+    }
+
+    if (checkoutMode === "embedded") {
+      res.json({
+        clientSecret: session.client_secret,
+        sessionId: session.id,
+      });
+    } else {
+      res.json({ url: session.url });
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
     console.error("Stripe Checkout error:", msg);
@@ -421,6 +623,7 @@ if (!process.env.VERCEL) {
     console.log(`\n🚀 Auto-Beratung Backend (Lokal) läuft auf Port ${PORT}`);
     console.log(`   → Gemini API: ${process.env.GEMINI_API_KEY ? "✅ Key vorhanden" : "❌ Key fehlt!"}`);
     console.log(`   → Stripe:     ${process.env.STRIPE_SECRET_KEY ? "✅ Key vorhanden" : "⚠️  Key fehlt (Checkout/Webhook deaktiviert)"}`);
+    console.log(`   → Checkout-Mode: ${process.env.CHECKOUT_MODE === "embedded" ? "embedded" : "hosted (default)"}`);
   });
 }
 
@@ -455,6 +658,7 @@ function buildOwnerEmail(meta: Record<string, string>, session: Stripe.Checkout.
     ${meta.notes ? `<div class="row"><span class="label">Anmerkungen:</span></div><div class="notes">"${meta.notes}"</div>` : ""}
     <div class="footer">
       Stripe Session ID: ${session.id}<br>
+      Source: ${meta.source ?? "unknown"}<br>
       Zeitpunkt: ${new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}
     </div>
   </div>

@@ -1,9 +1,20 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Timo's Auto-Beratung — Frontend
+ *
+ * Stripe-Checkout-Modus wird per VITE_CHECKOUT_MODE gesteuert:
+ *   - "hosted" (default)   → Top-Level-Redirect zu checkout.stripe.com
+ *   - "embedded"           → Stripe-iframe inline (TikTok In-App-Browser safe)
+ *
+ * TikTok-Erkennung: zusätzlich zum source=URL-Parameter wird der
+ * User-Agent geprüft. Der "Im Browser öffnen"-Hinweis erscheint nur
+ * wenn (a) der Embedded Checkout nicht lädt oder (b) die Zahlung fehlschlägt.
+ * Ein nicht-blockierender Banner zeigt den Hinweis dauerhaft klein an.
  */
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Car,
   ShieldCheck,
@@ -27,7 +38,38 @@ import {
   Sliders,
   CheckCircle,
   Menu,
+  ExternalLink,
+  Info,
 } from "lucide-react";
+import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
+import {
+  EmbeddedCheckoutProvider,
+  EmbeddedCheckout,
+} from "@stripe/react-stripe-js";
+
+// ─────────────────────────────────────────────
+//  Stripe Setup
+// ─────────────────────────────────────────────
+const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+const CHECKOUT_MODE = (import.meta.env.VITE_CHECKOUT_MODE === "embedded" ? "embedded" : "hosted") as
+  | "hosted"
+  | "embedded";
+
+// loadStripe gibt Promise<Stripe | null>. Wir halten die Promise auf
+// Module-Ebene, damit sie nicht bei jedem Render neu erzeugt wird.
+const stripePromise: Promise<StripeJs | null> = STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(STRIPE_PUBLISHABLE_KEY)
+  : Promise.resolve(null);
+
+// ─────────────────────────────────────────────
+//  TikTok / In-App-Browser Detection
+//  (Heuristik — keine Garantie)
+// ─────────────────────────────────────────────
+function isLikelyInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /TikTok|BytedanceWebview|musical_ly|FBAN|FBAV|Instagram|Line\/|MicroMessenger/i.test(ua);
+}
 
 interface CarDetail {
   name: string;
@@ -38,6 +80,26 @@ interface CarDetail {
   details: string;
 }
 
+interface CheckoutFormState {
+  budget: string;
+  brand: string;
+  bodyType: string;
+  transmission: string;
+  drive: string;
+  notes: string;
+  email: string;
+}
+
+const DEFAULT_FORM: CheckoutFormState = {
+  budget: "",
+  brand: "",
+  bodyType: "Limousine",
+  transmission: "egal",
+  drive: "egal",
+  notes: "",
+  email: "",
+};
+
 export default function App() {
   const [carQuery, setCarQuery] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -45,18 +107,23 @@ export default function App() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
 
-  const [budget, setBudget] = useState("");
-  const [brand, setBrand] = useState("");
-  const [bodyType, setBodyType] = useState("Limousine");
-  const [transmission, setTransmission] = useState("egal");
-  const [drive, setDrive] = useState("egal");
-  const [notes, setNotes] = useState("");
-  const [email, setEmail] = useState("");
+  const [form, setForm] = useState<CheckoutFormState>(DEFAULT_FORM);
   const [formSubmitted, setFormSubmitted] = useState(
     () => new URLSearchParams(window.location.search).get("payment") === "success"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [showFallbackHint, setShowFallbackHint] = useState(false);
+
+  // Source: aus ?source=… (TikTok-Tracking)
+  const [source, setSource] = useState<string>("direct");
+
+  // Embedded Checkout State
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
+
+  // Doppelklick-Schutz: Referenz auf laufende Request-Promise
+  const inFlightCheckout = useRef<Promise<void> | null>(null);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"home" | "ai-tool">("home");
@@ -65,6 +132,49 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<string>("home");
 
   const bookingRef = useRef<HTMLElement | null>(null);
+  const likelyInApp = useRef<boolean>(false);
+
+  // ─── Mount: source, in-app-detection, draft-restore ───
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const src = params.get("source");
+    if (src) setSource(src);
+
+    // Erfolg-Redirect: ?payment=success → formSubmitted true
+    if (params.get("payment") === "success") {
+      setFormSubmitted(true);
+    }
+
+    likelyInApp.current = isLikelyInAppBrowser();
+
+    // Optional: Draft-Token aus URL (?draft=…) — nur für User, die im
+    // TikTok-Browser auf "Im Browser öffnen" geklickt haben.
+    const draftToken = params.get("draft");
+    if (draftToken && /^[a-f0-9]{64}$/.test(draftToken)) {
+      void loadDraft(draftToken);
+    }
+  }, []);
+
+  async function loadDraft(token: string) {
+    try {
+      const res = await fetch(`/api/checkout-draft/${encodeURIComponent(token)}`);
+      if (!res.ok) return; // silently ignore — Form bleibt leer
+      const data = (await res.json()) as Partial<CheckoutFormState> & { source?: string };
+      setForm((prev) => ({
+        ...prev,
+        budget: data.budget ?? prev.budget,
+        brand: data.brand ?? prev.brand,
+        bodyType: data.bodyType ?? prev.bodyType,
+        transmission: data.transmission ?? prev.transmission,
+        drive: data.drive ?? prev.drive,
+        notes: data.notes ?? prev.notes,
+        email: data.email ?? prev.email,
+      }));
+      if (data.source) setSource(data.source);
+    } catch {
+      // silently ignore
+    }
+  }
 
   useEffect(() => {
     const handler = () => setNavScrolled(window.scrollY > 20);
@@ -104,6 +214,7 @@ export default function App() {
     }
   };
 
+  // ─── KI-Analyse (unverändert) ───
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!carQuery.trim()) return;
@@ -136,26 +247,125 @@ export default function App() {
     finally { setIsAnalyzing(false); }
   };
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
+  // ─── startCheckout: extrahierte async Funktion (statt inline in handleFormSubmit) ───
+  const startCheckout = useCallback(async (): Promise<void> => {
+    if (inFlightCheckout.current) {
+      // Doppelklick-Schutz: laufenden Request wiederverwenden
+      return inFlightCheckout.current;
+    }
+    if (!form.email.trim()) return;
+
+    setIsSubmitting(true);
+    setCheckoutError(null);
+    setShowFallbackHint(false);
+
+    const promise = (async () => {
+      try {
+        const res = await fetch("/api/create-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            budget: form.budget,
+            brand: form.brand,
+            bodyType: form.bodyType,
+            transmission: form.transmission,
+            drive: form.drive,
+            notes: form.notes,
+            email: form.email,
+            source,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setCheckoutError(data.error ?? "Checkout konnte nicht gestartet werden.");
+          setShowFallbackHint(true);
+          return;
+        }
+
+        if (CHECKOUT_MODE === "embedded") {
+          if (!data.clientSecret) {
+            setCheckoutError("Server hat keinen client_secret zurückgegeben.");
+            setShowFallbackHint(true);
+            return;
+          }
+          setCheckoutSessionId(data.sessionId);
+          setCheckoutClientSecret(data.clientSecret);
+        } else {
+          if (!data.url) {
+            setCheckoutError("Server hat keine Checkout-URL zurückgegeben.");
+            setShowFallbackHint(true);
+            return;
+          }
+          // Hosted-Mode: Top-Level-Redirect
+          window.location.href = data.url;
+        }
+      } catch {
+        setCheckoutError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
+        setShowFallbackHint(true);
+      } finally {
+        setIsSubmitting(false);
+        inFlightCheckout.current = null;
+      }
+    })();
+
+    inFlightCheckout.current = promise;
+    return promise;
+  }, [form, source]);
+
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
-    setIsSubmitting(true); setCheckoutError(null);
-    try {
-      const res = await fetch("/api/create-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ budget, brand, bodyType, transmission, drive, notes, email }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.url) { setCheckoutError(data.error ?? "Checkout konnte nicht gestartet werden."); setIsSubmitting(false); return; }
-      window.location.href = data.url;
-    } catch { setCheckoutError("Verbindung fehlgeschlagen."); setIsSubmitting(false); }
+    void startCheckout();
   };
 
   const handleResetForm = () => {
-    setBudget(""); setBrand(""); setBodyType("Limousine"); setTransmission("egal");
-    setDrive("egal"); setNotes(""); setEmail(""); setFormSubmitted(false);
+    setForm(DEFAULT_FORM);
+    setFormSubmitted(false);
+    setCheckoutClientSecret(null);
+    setCheckoutSessionId(null);
+    setCheckoutError(null);
+    setShowFallbackHint(false);
   };
+
+  // ─── Embedded Checkout: onComplete → formSubmitted ───
+  const handleEmbeddedComplete = useCallback(() => {
+    setFormSubmitted(true);
+    setCheckoutClientSecret(null);
+  }, []);
+
+  // Fallback-Link: User kann aus dem In-App-Browser in den echten Browser wechseln
+  // Wir legen einen Draft an und schicken User auf timocar.de/?draft=<token>
+  const handleOpenInExternalBrowser = useCallback(async () => {
+    if (!form.email.trim()) {
+      setCheckoutError("Bitte zuerst E-Mail ausfüllen, damit wir die Daten übertragen können.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/checkout-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, source }),
+      });
+      if (!res.ok) {
+        setCheckoutError("Konnte Daten nicht für Browser-Wechsel vorbereiten.");
+        return;
+      }
+      const { token } = (await res.json()) as { token: string };
+      const target = `${window.location.origin}/?draft=${token}&source=${encodeURIComponent(source)}`;
+      // Versuche, in externen Browser zu öffnen via intent-URL (Android)
+      // Auf iOS gibt es keinen universellen Trick — wir zeigen den Link an,
+      // den User manuell antippen muss.
+      const intent = `intent://${target.replace(/^https?:\/\//, "")}#Intent;scheme=https;package=com.android.chrome;end`;
+      if (/android/i.test(navigator.userAgent)) {
+        window.location.href = intent;
+      } else {
+        // iOS / Desktop: zeige URL zum manuellen Kopieren
+        navigator.clipboard?.writeText(target).catch(() => {});
+        setCheckoutError(`Link zum Fortfahren wurde in die Zwischenablage kopiert: ${target}`);
+      }
+    } catch {
+      setCheckoutError("Verbindung fehlgeschlagen.");
+    }
+  }, [form, source]);
 
   const navLinks: { label: string; section: string; action: (e?: React.MouseEvent) => void }[] = [
     { label: "Startseite", section: "home", action: () => { setActiveView("home"); window.scrollTo({ top: 0, behavior: "smooth" }); } },
@@ -384,7 +594,9 @@ export default function App() {
                     <div className="border-b border-[#1A1A1A] px-6 py-4 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <ShieldCheck className="w-4 h-4 text-brand-orange" />
-                        <span className="text-sm font-bold text-white">Sicherer Checkout · Stripe</span>
+                        <span className="text-sm font-bold text-white">
+                          Sicherer Checkout · Stripe {CHECKOUT_MODE === "embedded" ? "(inline)" : ""}
+                        </span>
                       </div>
                       <span className="text-xs font-bold text-zinc-600 uppercase tracking-wider">DSGVO-Konform</span>
                     </div>
@@ -396,48 +608,79 @@ export default function App() {
                         </div>
                         <div>
                           <h4 className="text-xl font-black text-white font-display">Anfrage eingegangen!</h4>
-                          <p className="text-zinc-400 mt-2 text-sm">Bestätigung an <strong className="text-white">{email}</strong> gesendet.</p>
+                          <p className="text-zinc-400 mt-2 text-sm">Bestätigung an <strong className="text-white">{form.email}</strong> gesendet.</p>
                         </div>
                         <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-lg p-5 text-left space-y-3 max-w-md mx-auto">
                           <h5 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-[#1A1A1A]">
                             <Sliders className="w-3.5 h-3.5 text-brand-orange" /> Übermittelte Kriterien
                           </h5>
                           <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-xs text-zinc-500">
-                            <span>Budget: <strong className="text-white">{budget ? `${budget} €` : "—"}</strong></span>
-                            <span>Marke: <strong className="text-white">{brand || "Egal"}</strong></span>
-                            <span>Karosserie: <strong className="text-white">{bodyType}</strong></span>
-                            <span>Getriebe: <strong className="text-white">{transmission}</strong></span>
-                            <span>Antrieb: <strong className="text-white">{drive}</strong></span>
-                            <span>E-Mail: <strong className="text-white">{email}</strong></span>
+                            <span>Budget: <strong className="text-white">{form.budget ? `${form.budget} €` : "—"}</strong></span>
+                            <span>Marke: <strong className="text-white">{form.brand || "Egal"}</strong></span>
+                            <span>Karosserie: <strong className="text-white">{form.bodyType}</strong></span>
+                            <span>Getriebe: <strong className="text-white">{form.transmission}</strong></span>
+                            <span>Antrieb: <strong className="text-white">{form.drive}</strong></span>
+                            <span>E-Mail: <strong className="text-white">{form.email}</strong></span>
                           </div>
-                          {notes && <p className="text-xs text-zinc-600 italic pt-2 border-t border-[#1A1A1A]">"{notes}"</p>}
+                          {form.notes && <p className="text-xs text-zinc-600 italic pt-2 border-t border-[#1A1A1A]">"{form.notes}"</p>}
                         </div>
                         <p className="text-xs text-zinc-600 max-w-xs mx-auto">Timo prüft deine Anfrage persönlich und sendet dir innerhalb von 48 Stunden 3 Vorschläge.</p>
                         <button onClick={handleResetForm} className="px-5 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-white text-sm font-bold rounded-lg hover:border-[#3A3A3A] transition-colors cursor-pointer">
                           Neue Anfrage
                         </button>
                       </div>
+                    ) : checkoutClientSecret && CHECKOUT_MODE === "embedded" ? (
+                      // ─── EMBEDDED CHECKOUT ───
+                      <div className="p-4 md:p-6">
+                        {!STRIPE_PUBLISHABLE_KEY && (
+                          <div className="mb-4 p-3 bg-red-950/20 border border-red-900/50 rounded-lg flex items-start gap-2.5 text-red-400 text-xs">
+                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>VITE_STRIPE_PUBLISHABLE_KEY fehlt. In Vercel unter Environment Variables setzen.</span>
+                          </div>
+                        )}
+                        {STRIPE_PUBLISHABLE_KEY && stripePromise && (
+                          <EmbeddedCheckoutProvider
+                            key={checkoutSessionId ?? "checkout"}
+                            stripe={stripePromise}
+                            options={{
+                              clientSecret: checkoutClientSecret,
+                              onComplete: handleEmbeddedComplete,
+                            }}
+                          >
+                            <div className="bg-white rounded-lg overflow-hidden min-h-[500px]">
+                              <EmbeddedCheckout />
+                            </div>
+                          </EmbeddedCheckoutProvider>
+                        )}
+                        <button
+                          onClick={() => { setCheckoutClientSecret(null); setCheckoutSessionId(null); setCheckoutError(null); }}
+                          className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1.5"
+                        >
+                          <X className="w-3.5 h-3.5" /> Formular zurücksetzen
+                        </button>
+                      </div>
                     ) : (
+                      // ─── FORMULAR (oder hosted-mode pre-submit) ───
                       <form onSubmit={handleFormSubmit} className="p-6 md:p-8 space-y-5">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                           <div className="space-y-1.5">
                             <label htmlFor="budget-input" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Budget (€)</label>
                             <div className="relative">
-                              <input id="budget-input" type="number" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="z. B. 25000"
+                              <input id="budget-input" type="number" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="z. B. 25000"
                                 className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
                               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-700 text-sm">€</span>
                             </div>
                           </div>
                           <div className="space-y-1.5">
                             <label htmlFor="brand-input" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Wunschmarke</label>
-                            <input id="brand-input" type="text" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="BMW, Audi, Egal..."
+                            <input id="brand-input" type="text" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} placeholder="BMW, Audi, Egal..."
                               className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
                           </div>
                         </div>
 
                         <div className="space-y-1.5">
                           <label htmlFor="body-type" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Karosserietyp</label>
-                          <select id="body-type" value={bodyType} onChange={(e) => setBodyType(e.target.value)}
+                          <select id="body-type" value={form.bodyType} onChange={(e) => setForm({ ...form, bodyType: e.target.value })}
                             className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all cursor-pointer">
                             {["Kleinwagen","Limousine","SUV","Kombi","Coupé","Cabrio","Van"].map(o => <option key={o} value={o} className="bg-[#0D0D0D]">{o}</option>)}
                           </select>
@@ -447,8 +690,8 @@ export default function App() {
                           <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Getriebe</span>
                           <div className="grid grid-cols-3 gap-2">
                             {["Schaltgetriebe","Automatik","egal"].map(o => (
-                              <label key={o} className={`border rounded-lg p-3 flex items-center justify-center text-sm font-bold cursor-pointer transition-all select-none ${transmission === o ? "border-brand-orange bg-brand-orange/10 text-brand-orange" : "border-[#222222] bg-[#0D0D0D] text-zinc-600 hover:border-[#333333] hover:text-zinc-300"}`}>
-                                <input type="radio" name="transmission" value={o} checked={transmission === o} onChange={() => setTransmission(o)} className="sr-only" />
+                              <label key={o} className={`border rounded-lg p-3 flex items-center justify-center text-sm font-bold cursor-pointer transition-all select-none ${form.transmission === o ? "border-brand-orange bg-brand-orange/10 text-brand-orange" : "border-[#222222] bg-[#0D0D0D] text-zinc-600 hover:border-[#333333] hover:text-zinc-300"}`}>
+                                <input type="radio" name="transmission" value={o} checked={form.transmission === o} onChange={() => setForm({ ...form, transmission: o })} className="sr-only" />
                                 <span className="capitalize">{o}</span>
                               </label>
                             ))}
@@ -459,8 +702,8 @@ export default function App() {
                           <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Antrieb</span>
                           <div className="grid grid-cols-4 gap-2">
                             {["Frontantrieb","Heckantrieb","Allrad","egal"].map(o => (
-                              <label key={o} className={`border rounded-lg py-3 px-1 flex items-center justify-center text-xs font-bold cursor-pointer transition-all select-none ${drive === o ? "border-brand-orange bg-brand-orange/10 text-brand-orange" : "border-[#222222] bg-[#0D0D0D] text-zinc-600 hover:border-[#333333] hover:text-zinc-300"}`}>
-                                <input type="radio" name="drive" value={o} checked={drive === o} onChange={() => setDrive(o)} className="sr-only" />
+                              <label key={o} className={`border rounded-lg py-3 px-1 flex items-center justify-center text-xs font-bold cursor-pointer transition-all select-none ${form.drive === o ? "border-brand-orange bg-brand-orange/10 text-brand-orange" : "border-[#222222] bg-[#0D0D0D] text-zinc-600 hover:border-[#333333] hover:text-zinc-300"}`}>
+                                <input type="radio" name="drive" value={o} checked={form.drive === o} onChange={() => setForm({ ...form, drive: o })} className="sr-only" />
                                 <span className="capitalize text-center">{o}</span>
                               </label>
                             ))}
@@ -469,7 +712,7 @@ export default function App() {
 
                         <div className="space-y-1.5">
                           <label htmlFor="notes-textarea" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Weitere Wünsche</label>
-                          <textarea id="notes-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="z. B. Mindestens 4 Türen, Panoramadach, Langstrecke..." rows={3}
+                          <textarea id="notes-textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="z. B. Mindestens 4 Türen, Panoramadach, Langstrecke..." rows={3}
                             className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all resize-none" />
                         </div>
 
@@ -477,7 +720,7 @@ export default function App() {
                           <label htmlFor="email-input" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">E-Mail <span className="text-brand-orange">*</span></label>
                           <div className="relative">
                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
-                            <input id="email-input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="deine.email@beispiel.de"
+                            <input id="email-input" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="deine.email@beispiel.de"
                               className="w-full pl-11 pr-4 py-3 bg-[#0D0D0D] border border-[#222222] rounded-lg text-white placeholder-zinc-700 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-all" />
                           </div>
                         </div>
@@ -487,17 +730,47 @@ export default function App() {
                           <span>Verschlüsselt übertragen · Nur zur Erstellung der Empfehlung verwendet</span>
                         </div>
 
-                        {checkoutError && (
-                          <div className="flex items-start gap-2.5 p-3.5 bg-red-950/20 border border-red-900/50 rounded-lg text-red-400 text-xs">
-                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                            <span>{checkoutError}</span>
+                        {/* Nicht-blockierender TikTok-Hinweis (nur sichtbar wenn Heuristik zutrifft) */}
+                        {likelyInApp.current && (
+                          <div className="flex items-start gap-2.5 p-3 bg-zinc-900/40 border border-zinc-800/50 rounded-lg text-zinc-500 text-xs">
+                            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-zinc-600" />
+                            <span>
+                              Du bist im In-App-Browser. Die Zahlung funktioniert, aber für ein reibungsloses Erlebnis empfehlen wir{" "}
+                              <button
+                                type="button"
+                                onClick={handleOpenInExternalBrowser}
+                                className="underline hover:text-zinc-300 cursor-pointer"
+                              >
+                                im normalen Browser öffnen
+                              </button>
+                              .
+                            </span>
                           </div>
                         )}
 
-                        <button type="submit" disabled={isSubmitting || !email.trim()}
+                        {checkoutError && (
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-2.5 p-3.5 bg-red-950/20 border border-red-900/50 rounded-lg text-red-400 text-xs">
+                              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                              <span>{checkoutError}</span>
+                            </div>
+                            {showFallbackHint && (
+                              <button
+                                type="button"
+                                onClick={handleOpenInExternalBrowser}
+                                className="w-full py-2.5 border border-amber-700/50 bg-amber-950/20 text-amber-200 text-xs font-bold rounded-lg hover:bg-amber-950/40 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Im normalen Browser fortsetzen
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        <button type="submit" disabled={isSubmitting || !form.email.trim()}
                           className="w-full py-4 bg-brand-orange text-white font-bold rounded-lg hover:bg-[#e05621] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 text-base cursor-pointer">
                           {isSubmitting
-                            ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Weiterleitung zu Stripe...</span></>
+                            ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Wird vorbereitet…</span></>
                             : <><span>49 € zahlen & Beratung anfragen</span><ArrowRight className="w-5 h-5" /></>}
                         </button>
 
@@ -717,74 +990,91 @@ export default function App() {
                     YoTimo Auto-Beratung<br />
                     {/* TODO: Echte Adresse eintragen */}
                     <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Straße und Hausnummer]</span><br />
-                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: PLZ und Stadt]</span>
+                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: PLZ und Ort]</span>
                   </p>
-                  <p className="font-semibold text-white">Kontakt:</p>
                   <p>
-                    Telefon: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Telefonnummer]</span><br />
-                    E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>
+                    <strong className="text-white">Kontakt:</strong><br />
+                    E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: E-Mail-Adresse]</span>
                   </p>
-                  <p className="font-semibold text-white">Umsatzsteuer-ID:</p>
-                  <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a UStG: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: USt-ID]</span></p>
-                  <p className="font-semibold text-white">Redaktionell verantwortlich:</p>
-                  <p>Timo (Anschrift wie oben)</p>
-                  <p className="font-semibold text-white">Streitschlichtung:</p>
-                  <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://ec.europa.eu/consumers/odr</a>. Zur Teilnahme an einem Streitbeilegungsverfahren sind wir nicht verpflichtet und nicht bereit.</p>
+                  <p>
+                    <strong className="text-white">Umsatzsteuer-ID:</strong><br />
+                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: USt-IdNr. falls vorhanden]</span>
+                  </p>
+                  <p>
+                    <strong className="text-white">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV:</strong><br />
+                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Name und Anschrift]</span>
+                  </p>
                 </div>
               )}
+
               {activeModal === "widerruf" && (
                 <div className="space-y-4">
                   <p className="font-bold text-white">Widerrufsbelehrung</p>
-                  <p className="font-semibold text-white">Widerrufsrecht</p>
-                  <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
-                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (YoTimo Auto-Beratung, <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Adresse]</span>, E-Mail: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: kontakt@email.de]</span>) mittels einer eindeutigen Erklärung informieren.</p>
-                  <p className="font-semibold text-white">Vorzeitiges Erlöschen des Widerrufsrechts</p>
-                  <p className="bg-[#0D0D0D] p-3 rounded-lg border border-[#1E1E1E] italic text-xs text-zinc-500">
-                    Das Widerrufsrecht erlischt vorzeitig bei vollständiger Erbringung der Dienstleistung. Da es sich um eine digitale Express-Dienstleistung innerhalb von 48 Stunden handelt, stimmen Sie dieser Ausführung bei Bestellung ausdrücklich zu.
-                  </p>
-                  <p className="font-semibold text-white">Folgen des Widerrufs</p>
-                  <p>Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen unverzüglich und spätestens binnen vierzehn Tagen zurückzuzahlen.</p>
+                  <p>Verbraucher haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
+                  <p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns ([TODO: E-Mail]) mittels einer eindeutigen Erklärung (z. B. ein mit der Post versandter Brief oder E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren.</p>
+                  <p><strong className="text-white">Folgen des Widerrufs:</strong> Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von Ihnen erhalten haben, unverzüglich zurückzuzahlen.</p>
                 </div>
               )}
+
               {activeModal === "agb" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-white">Allgemeine Geschäftsbedingungen (AGB)</p>
-                  <p className="font-semibold text-white">§ 1 Geltungsbereich</p>
-                  <p>Diese AGB gelten für alle Dienstleistungen zwischen YoTimo Auto-Beratung und dem Kunden.</p>
-                  <p className="font-semibold text-white">§ 2 Vertragsgegenstand</p>
-                  <p>Gegenstand ist die herstellerunabhängige Kaufberatung für Kraftfahrzeuge. Der Dienstleister erstellt ein personalisiertes Dossier mit 3 Fahrzeugvorschlägen auf Basis der vom Kunden übermittelten Angaben.</p>
-                  <p className="font-semibold text-white">§ 3 Zahlungsbedingungen</p>
-                  <p>Die Preise verstehen sich als Endpreise inklusive der gesetzlichen Umsatzsteuer. Der Betrag von 49 € ist bei Buchung fällig.</p>
-                  <p className="font-semibold text-white">§ 4 Lieferzeit</p>
-                  <p>Die Übersendung der 3 Auto-Vorschläge erfolgt innerhalb von 48 Stunden ab Zahlungseingang per E-Mail.</p>
-                  <p className="font-semibold text-white">§ 5 Haftungsausschluss</p>
-                  <p>Der Dienstleister haftet nicht für Mängel an Fahrzeugen, die der Kunde erwirbt. Alle Empfehlungen sind unverbindliche Fachmeinungen. Eine physische Begutachtung vor Kaufabschluss wird empfohlen.</p>
+                  <p className="font-bold text-white">§1 Geltungsbereich</p>
+                  <p>Diese AGB gelten für alle Verträge zwischen YoTimo Auto-Beratung und dem Kunden über die Erbringung von Auto-Beratungsdienstleistungen.</p>
+
+                  <p className="font-bold text-white">§2 Leistungen</p>
+                  <p>Der Anbieter erbringt individuelle Auto-Beratungsdienstleistungen auf Basis der vom Kunden gemachten Angaben. Die Beratung umfasst die Recherche und Empfehlung von drei Fahrzeugen per E-Mail innerhalb von 48 Stunden.</p>
+
+                  <p className="font-bold text-white">§3 Vergütung</p>
+                  <p>Die Vergütung beträgt 49 € inkl. MwSt. pro Beratung. Die Zahlung erfolgt über den Zahlungsdienstleister Stripe.</p>
+
+                  <p className="font-bold text-white">§4 Pflichten des Kunden</p>
+                  <p>Der Kunde ist verpflichtet, wahrheitsgemäße und vollständige Angaben zu machen. Eine Beratung erfolgt auf Basis dieser Angaben.</p>
+
+                  <p className="font-bold text-white">§5 Haftung</p>
+                  <p>Die Beratung basiert auf Marktrecherche und statistischen Daten. Der Anbieter übernimmt keine Haftung für die Korrektheit der Empfehlungen oder für Schäden, die aus dem Kauf eines empfohlenen Fahrzeugs entstehen.</p>
+
+                  <p className="font-bold text-white">§6 Schlussbestimmungen</p>
+                  <p>Es gilt das Recht der Bundesrepublik Deutschland. Gerichtsstand ist [TODO: Sitz des Anbieters].</p>
                 </div>
               )}
+
               {activeModal === "datenschutz" && (
                 <div className="space-y-4">
-                  <p className="font-bold text-white">Datenschutzerklärung gemäß DSGVO</p>
-                  <p className="font-semibold text-white">1. Datenschutz auf einen Blick</p>
-                  <p>Personenbezogene Daten werden nur im technisch notwendigen Umfang verarbeitet.</p>
-                  <p className="font-semibold text-white">2. Datenerhebung bei Auftragsstellung</p>
-                  <p>Bei einer Beratungsanfrage erheben wir Budget, Wunschmarke, Karosserietyp, Getriebeart, Antrieb und Ihre E-Mail. Diese Daten werden ausschließlich zur Bearbeitung Ihrer Empfehlungen verwendet.</p>
-                  <p className="font-semibold text-white">3. Ihre Rechte</p>
-                  <p>Sie haben jederzeit das Recht auf Auskunft, Berichtigung und Löschung Ihrer gespeicherten Daten. Schreiben Sie uns an: <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: datenschutz@email.de]</span></p>
-                  <p className="font-semibold text-white">4. Datensicherheit</p>
-                  <p>Ihre Daten werden über eine verschlüsselte SSL-Verbindung (HTTPS) übertragen.</p>
+                  <p className="font-bold text-white">1. Datenschutz auf einen Blick</p>
+                  <p>Wir nehmen den Schutz deiner persönlichen Daten ernst. Personenbezogene Daten werden nur im Rahmen der gesetzlichen Vorschriften, insbesondere der DSGVO, erhoben und verarbeitet.</p>
+
+                  <p className="font-bold text-white">2. Verantwortliche Stelle</p>
+                  <p>YoTimo Auto-Beratung · <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: Adresse]</span> · <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: E-Mail]</span></p>
+
+                  <p className="font-bold text-white">3. Erhebung und Verarbeitung von Daten</p>
+                  <p>Beim Besuch dieser Website werden automatisch Informationen wie IP-Adresse, Browsertyp und Zugriffszeitpunkt verarbeitet. Bei der Buchung einer Beratung erheben wir die im Formular angegebenen Daten (E-Mail, Budget, Wünsche etc.).</p>
+
+                  <p className="font-bold text-white">4. Zahlungsabwicklung</p>
+                  <p>Die Zahlungsabwicklung erfolgt über den externen Zahlungsdienstleister Stripe. Es gelten die Datenschutzbestimmungen von Stripe: <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://stripe.com/privacy</a>.</p>
+
+                  <p className="font-bold text-white">5. KI-Fahrzeuganalyse</p>
+                  <p>Die KI-Fahrzeuganalyse nutzt Google Gemini und Exa zur Verarbeitung der von dir eingegebenen Fahrzeugnamen. Die Daten werden nicht zu Trainingszwecken verwendet.</p>
+
+                  <p className="font-bold text-white">6. Deine Rechte</p>
+                  <p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. Wende dich dazu an <span className="bg-amber-500/20 text-amber-300 font-bold px-1 rounded">[TODO: E-Mail]</span>.</p>
+
+                  <p className="font-bold text-white">7. Cookies</p>
+                  <p>Diese Website verwendet keine Tracking-Cookies. Stripe kann im Rahmen der Zahlungsabwicklung technisch notwendige Cookies setzen.</p>
                 </div>
               )}
-            </div>
 
-            <div className="px-6 py-4 border-t border-[#1A1A1A] flex justify-end">
-              <button onClick={() => setActiveModal(null)} className="px-5 py-2.5 bg-brand-orange hover:bg-[#e05621] text-white font-bold rounded-lg transition-colors cursor-pointer">
-                Schließen
-              </button>
+              <p className="mt-8 pt-4 border-t border-[#1A1A1A] text-xs text-zinc-700 italic">
+                Dies ist eine Vorlage. Bitte durch einen Anwalt prüfen lassen.
+              </p>
+
+              <p className="text-zinc-700">
+                <strong className="text-white">Streitschlichtung:</strong>
+              </p>
+              <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">https://ec.europa.eu/consumers/odr</a>. Zur Teilnahme an einem Streitbeilegungsverfahren sind wir nicht verpflichtet und nicht bereit.</p>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
