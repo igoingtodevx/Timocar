@@ -1,5 +1,5 @@
 /**
- * Auto-Beratung Premium — Express Backend (Vercel Serverless Compatible)
+ * AutoWunsch.com — Express Backend (Vercel Serverless Compatible)
  *
  * Endpoints:
  *   POST /api/analyze-car      → Gemini + Google Search Grounding
@@ -14,15 +14,27 @@ import nodemailer from "nodemailer";
 import "dotenv/config";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  CONSENT_VERSION,
+  DELIVERY_WINDOW,
+  PRODUCT_NAME,
+  PRODUCT_PRICE_CENTS,
+  type OrderFormData,
+  validateOrderForm,
+  hasOrderFormErrors,
+} from "../shared/order.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─────────────────────────────────────────────
 //  Env validation
 // ─────────────────────────────────────────────
-const REQUIRED_ENV = ["GEMINI_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "OWNER_EMAIL", "SMTP_HOST", "SMTP_USER", "SMTP_PASS"];
+const REQUIRED_ENV = ["GEMINI_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "OWNER_EMAIL", "SMTP_HOST", "SMTP_USER", "SMTP_PASS", "APP_URL"];
 for (const key of REQUIRED_ENV) {
-  if (!process.env[key]) {
+  const isMissing = key === "APP_URL"
+    ? !process.env.APP_URL && !process.env.VERCEL_URL
+    : !process.env[key];
+  if (isMissing) {
     console.warn(`⚠️  Missing env variable: ${key} — some features may not work`);
   }
 }
@@ -61,6 +73,7 @@ function getMailer() {
 //  In-memory rate limiter & cache
 // ─────────────────────────────────────────────
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const processedWebhookEvents = new Set<string>();
 const RATE_LIMIT = 3;
 const RATE_WINDOW_MS = 60_000;
 
@@ -74,6 +87,178 @@ function checkRateLimit(ip: string): boolean {
   if (entry.count >= RATE_LIMIT) return false;
   entry.count++;
   return true;
+}
+
+const SERVICE_DESCRIPTION = "3 handgeprüfte Fahrzeuglinks von Verkaufsplattformen innerhalb von 48 Stunden.";
+const CHECKOUT_CANCEL_PATH = "/?payment=cancelled";
+const CHECKOUT_SUCCESS_PATH = "/?payment=success&session_id={CHECKOUT_SESSION_ID}";
+const WITHDRAWAL_ERROR = "Widerruf konnte nicht verarbeitet werden.";
+const METADATA_VALUE_LIMIT = 500;
+const ORDER_TEXT_LIMITS: Record<keyof OrderFormData, number> = {
+  budget: 32,
+  brand: 120,
+  model: 120,
+  maxMileage: 32,
+  bodyType: 60,
+  transmission: 60,
+  drive: 60,
+  accidentFree: 20,
+  color: 40,
+  notes: 500,
+  email: 254,
+  acceptTerms: 5,
+  startBeforeWithdrawal: 5,
+  acknowledgeWithdrawalLoss: 5,
+};
+
+type Metadata = Record<string, string>;
+type WithdrawalInput = {
+  name?: unknown;
+  email?: unknown;
+  reference?: unknown;
+  ref?: unknown;
+  orderRef?: unknown;
+  declaration?: unknown;
+};
+
+type NormalizedWithdrawal = {
+  name: string;
+  email: string;
+  reference: string;
+  declaration: string;
+};
+
+function getClientIp(req: Request): string {
+  return (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+}
+
+function trimString(value: unknown, maxLength: number): string {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, maxLength) : "";
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  return value === true || value === "true" || value === "on" || value === "1";
+}
+
+export function normalizeOrderFormData(input: Partial<OrderFormData> | Record<string, unknown>): OrderFormData {
+  return {
+    budget: trimString(input.budget, ORDER_TEXT_LIMITS.budget),
+    brand: trimString(input.brand, ORDER_TEXT_LIMITS.brand),
+    model: trimString(input.model, ORDER_TEXT_LIMITS.model),
+    maxMileage: trimString(input.maxMileage, ORDER_TEXT_LIMITS.maxMileage),
+    bodyType: trimString(input.bodyType, ORDER_TEXT_LIMITS.bodyType),
+    transmission: trimString(input.transmission, ORDER_TEXT_LIMITS.transmission),
+    drive: trimString(input.drive, ORDER_TEXT_LIMITS.drive),
+    accidentFree: trimString(input.accidentFree, ORDER_TEXT_LIMITS.accidentFree),
+    color: trimString(input.color, ORDER_TEXT_LIMITS.color),
+    notes: trimString(input.notes, ORDER_TEXT_LIMITS.notes),
+    email: trimString(input.email, ORDER_TEXT_LIMITS.email).toLowerCase(),
+    acceptTerms: normalizeBoolean(input.acceptTerms),
+    startBeforeWithdrawal: normalizeBoolean(input.startBeforeWithdrawal),
+    acknowledgeWithdrawalLoss: normalizeBoolean(input.acknowledgeWithdrawalLoss),
+  };
+}
+
+export function validateAndNormalizeOrder(input: Partial<OrderFormData> | Record<string, unknown>) {
+  const data = normalizeOrderFormData(input);
+  const errors = validateOrderForm(data);
+  return { data, errors, valid: !hasOrderFormErrors(errors) };
+}
+
+function metadataValue(value: string | number | boolean): string {
+  return String(value).slice(0, METADATA_VALUE_LIMIT);
+}
+
+export function buildOrderMetadata(order: OrderFormData, orderedAtIso: string): Metadata {
+  return {
+    service: PRODUCT_NAME,
+    service_details: SERVICE_DESCRIPTION,
+    price_eur: "49",
+    delivery_window: DELIVERY_WINDOW,
+    email: metadataValue(order.email),
+    budget: metadataValue(order.budget),
+    brand: metadataValue(order.brand),
+    model: metadataValue(order.model),
+    maxMileage: metadataValue(order.maxMileage),
+    bodyType: metadataValue(order.bodyType),
+    transmission: metadataValue(order.transmission),
+    drive: metadataValue(order.drive),
+    accidentFree: metadataValue(order.accidentFree),
+    color: metadataValue(order.color),
+    notes: metadataValue(order.notes),
+    acceptTerms: metadataValue(order.acceptTerms),
+    startBeforeWithdrawal: metadataValue(order.startBeforeWithdrawal),
+    acknowledgeWithdrawalLoss: metadataValue(order.acknowledgeWithdrawalLoss),
+    consent_version: CONSENT_VERSION,
+    ordered_at: orderedAtIso,
+  };
+}
+
+function appUrl(): string {
+  const configuredUrl = process.env.APP_URL?.trim();
+  if (configuredUrl) return configuredUrl.replace(/\/+$/, "");
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `https://${vercelUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+
+  return "http://localhost:3000";
+}
+
+function safeLogError(context: string, err: unknown): void {
+  const msg = err instanceof Error ? err.message : "Unknown error";
+  console.error(`${context}: ${msg}`);
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatCents(amount: number | null | undefined, currency = "eur"): string {
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: currency.toUpperCase() }).format((amount ?? PRODUCT_PRICE_CENTS) / 100);
+}
+
+export function isPaidCompleteSession(session: Pick<Stripe.Checkout.Session, "payment_status" | "status">): boolean {
+  return session.payment_status === "paid" && session.status === "complete";
+}
+
+export function buildSafeCheckoutSessionResponse(session: Stripe.Checkout.Session) {
+  const meta = session.metadata ?? {};
+  return {
+    reference: session.id,
+    amount: session.amount_total ?? PRODUCT_PRICE_CENTS,
+    currency: session.currency ?? "eur",
+    status: session.status,
+    paymentStatus: session.payment_status,
+    product: meta.service ?? PRODUCT_NAME,
+  };
+}
+
+export function normalizeWithdrawalInput(input: WithdrawalInput): { data?: NormalizedWithdrawal; error?: string } {
+  const name = trimString(input.name, 120);
+  const email = trimString(input.email, 254).toLowerCase();
+  const reference = trimString(input.reference ?? input.ref ?? input.orderRef, 120);
+  const declaration = trimString(input.declaration, 500);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const referenceOk = /^cs_(test|live)_[A-Za-z0-9]+$/.test(reference);
+
+  if (!name || !emailOk || !referenceOk || !declaration) {
+    return { error: WITHDRAWAL_ERROR };
+  }
+
+  return { data: { name, email, reference, declaration } };
+}
+
+function isStripeSessionReference(reference: string): boolean {
+  return /^cs_(test|live)_[A-Za-z0-9]+$/.test(reference);
+}
+
+function mailFrom(): string {
+  return `"${PRODUCT_NAME}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`;
 }
 
 const carCache = new Map<string, { data: unknown; expiresAt: number }>();
@@ -166,42 +351,68 @@ app.post(
   express.raw({ type: "application/json" }),
   async (req: Request, res: Response) => {
     const sig = req.headers["stripe-signature"] as string;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!sig || !webhookSecret) {
+      res.status(400).send("Webhook configuration error");
+      return;
+    }
 
     let event: Stripe.Event;
     try {
       event = getStripe().webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      console.error("❌ Stripe webhook signature failed:", msg);
+      console.error("Stripe webhook signature failed:", msg);
       res.status(400).send(`Webhook Error: ${msg}`);
       return;
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const meta = session.metadata ?? {};
+      // Best-effort idempotency only: Vercel serverless memory is not durable.
+      // Hetzner delivery needs a persistent DB/queue keyed by Stripe event ID and session ID.
+      if (processedWebhookEvents.has(event.id)) {
+        res.json({ received: true, duplicate: true });
+        return;
+      }
+
+      let session = event.data.object as Stripe.Checkout.Session;
 
       try {
-        const mailer = getMailer();
-        await mailer.sendMail({
-          from: `"Auto-Beratung Premium" <${process.env.SMTP_USER}>`,
-          to: process.env.OWNER_EMAIL,
-          subject: `🚗 Neue Beratungsanfrage von ${meta.email ?? "Unbekannt"} — ${meta.budget ?? "?"}€ Budget`,
-          html: buildOwnerEmail(meta, session),
-        });
-        console.log(`✅ Owner-E-Mail gesendet an ${process.env.OWNER_EMAIL}`);
+        session = await getStripe().checkout.sessions.retrieve(session.id);
+        if (!isPaidCompleteSession(session)) {
+          res.json({ received: true });
+          return;
+        }
 
-        if (meta.email) {
+        const meta = session.metadata ?? {};
+        const mailer = getMailer();
+        const customerEmail = session.customer_details?.email ?? session.customer_email ?? meta.email;
+
+        if (customerEmail) {
           await mailer.sendMail({
-            from: `"Auto-Beratung Premium" <${process.env.SMTP_USER}>`,
-            to: meta.email,
-            subject: "✅ Deine Beratungsanfrage ist eingegangen!",
-            html: buildCustomerEmail(meta),
+            from: mailFrom(),
+            to: customerEmail,
+            subject: `Auftragsbestätigung ${PRODUCT_NAME}`,
+            html: buildCustomerContractEmail(meta, session, customerEmail),
           });
         }
+
+        await mailer.sendMail({
+          from: mailFrom(),
+          to: process.env.OWNER_EMAIL,
+          subject: `Neue bezahlte AutoWunsch-Bestellung ${session.id}`,
+          html: buildOwnerEmail(meta, session),
+        });
+        processedWebhookEvents.add(event.id);
+        if (processedWebhookEvents.size > 500) {
+          const oldest = processedWebhookEvents.values().next().value;
+          if (oldest) processedWebhookEvents.delete(oldest);
+        }
       } catch (mailErr) {
-        console.error("❌ E-Mail-Versand fehlgeschlagen:", mailErr);
+        safeLogError("Webhook processing failed", mailErr);
+        res.status(500).json({ error: "Webhook processing failed" });
+        return;
       }
     }
 
@@ -210,7 +421,7 @@ app.post(
 );
 
 // All other routes parse JSON
-app.use(express.json());
+app.use(express.json({ limit: "20kb" }));
 
 // ─────────────────────────────────────────────
 //  POST /api/analyze-car
@@ -351,60 +562,177 @@ Wichtig:
 //  POST /api/create-checkout
 // ─────────────────────────────────────────────
 app.post("/api/create-checkout", async (req: Request, res: Response) => {
-  const { budget, brand, bodyType, transmission, drive, notes, email } = req.body as {
-    budget?: string;
-    brand?: string;
-    bodyType?: string;
-    transmission?: string;
-    drive?: string;
-    notes?: string;
-    email?: string;
-  };
-
-  if (!email?.trim()) {
-    res.status(400).json({ error: "E-Mail-Adresse ist erforderlich." });
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`checkout:${ip}`)) {
+    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
     return;
   }
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const { data: order, errors, valid } = validateAndNormalizeOrder(req.body as Record<string, unknown>);
+  if (!valid) {
+    res.status(400).json({
+      error: "Bitte pruefe deine Angaben.",
+      errors,
+    });
+    return;
+  }
+
+  const orderedAt = new Date().toISOString();
+  const metadata = buildOrderMetadata(order, orderedAt);
 
   try {
     const session = await getStripe().checkout.sessions.create({
-      payment_method_types: ["card", "paypal"],
       mode: "payment",
-      customer_email: email.trim(),
+      customer_email: order.email,
+      locale: "de",
       line_items: [
         {
           price_data: {
             currency: "eur",
-            unit_amount: 4900,
+            unit_amount: PRODUCT_PRICE_CENTS,
             product_data: {
-              name: "Auto-Beratung Premium",
-              description: "Persönliche Auto-Beratung: 3 maßgeschneiderte Fahrzeugempfehlungen innerhalb von 48 Stunden.",
+              name: PRODUCT_NAME,
+              description: "AutoWunsch.com / Autoempfehlung Premium: 3 handgepruefte Fahrzeuglinks von Verkaufsplattformen innerhalb von 48 Stunden.",
             },
           },
           quantity: 1,
         },
       ],
-      metadata: {
-        email: email.trim().slice(0, 500),
-        budget: budget?.trim().slice(0, 100) ?? "",
-        brand: brand?.trim().slice(0, 100) ?? "",
-        bodyType: bodyType?.trim().slice(0, 100) ?? "",
-        transmission: transmission?.trim().slice(0, 100) ?? "",
-        drive: drive?.trim().slice(0, 100) ?? "",
-        notes: notes?.trim().slice(0, 500) ?? "",
+      metadata,
+      payment_intent_data: {
+        metadata,
       },
-      success_url: `${appUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/?payment=cancelled`,
+      success_url: `${appUrl()}${CHECKOUT_SUCCESS_PATH}`,
+      cancel_url: `${appUrl()}${CHECKOUT_CANCEL_PATH}`,
     });
 
     res.json({ url: session.url });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
-    console.error("Stripe Checkout error:", msg);
+    safeLogError("Stripe Checkout error", err);
     res.status(500).json({ error: "Zahlung konnte nicht initiiert werden. Bitte versuche es erneut." });
   }
+});
+
+// ─────────────────────────────────────────────
+//  GET /api/checkout-session
+// ─────────────────────────────────────────────
+app.get("/api/checkout-session", async (req: Request, res: Response) => {
+  const sessionId = typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
+  if (!/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId)) {
+    res.status(400).json({ error: "Ungueltige Checkout-Referenz." });
+    return;
+  }
+
+  try {
+    const session = await getStripe().checkout.sessions.retrieve(sessionId);
+    if (!isPaidCompleteSession(session)) {
+      res.status(404).json({ error: "Checkout nicht bestaetigt." });
+      return;
+    }
+
+    res.json(buildSafeCheckoutSessionResponse(session));
+  } catch (err) {
+    safeLogError("Checkout session retrieval failed", err);
+    res.status(404).json({ error: "Checkout nicht bestaetigt." });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  POST /api/withdrawal
+// ─────────────────────────────────────────────
+app.post("/api/withdrawal", async (req: Request, res: Response) => {
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`withdrawal:${ip}`)) {
+    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
+    return;
+  }
+
+  const normalized = normalizeWithdrawalInput(req.body as WithdrawalInput);
+  if (!normalized.data) {
+    res.status(400).json({ error: WITHDRAWAL_ERROR });
+    return;
+  }
+
+  const withdrawal = normalized.data;
+  let verifiedEmail = withdrawal.email;
+  let contractReference = withdrawal.reference;
+
+  try {
+    if (isStripeSessionReference(withdrawal.reference)) {
+      const session = await getStripe().checkout.sessions.retrieve(withdrawal.reference);
+      if (!isPaidCompleteSession(session)) {
+        res.status(400).json({ error: WITHDRAWAL_ERROR });
+        return;
+      }
+      const sessionEmail = (session.customer_details?.email ?? session.customer_email ?? session.metadata?.email ?? "").toLowerCase();
+      if (!sessionEmail || sessionEmail !== withdrawal.email) {
+        res.status(400).json({ error: WITHDRAWAL_ERROR });
+        return;
+      }
+      verifiedEmail = sessionEmail;
+      contractReference = session.id;
+    }
+
+    const timestamp = new Date().toISOString();
+    const receiptReference = buildWithdrawalReceiptReference(timestamp);
+    const mailer = getMailer();
+    const ownerEmail = process.env.OWNER_EMAIL?.trim().toLowerCase();
+    if (!ownerEmail) throw new Error("OWNER_EMAIL is missing");
+
+    const ownerResult = await mailer.sendMail({
+      from: mailFrom(),
+      to: ownerEmail,
+      subject: `Widerruf eingegangen ${receiptReference}`,
+      html: buildWithdrawalOwnerEmail(withdrawal, contractReference, receiptReference, timestamp),
+    });
+    const acceptedOwnerEmails = (ownerResult.accepted ?? [])
+      .map((mail) => (typeof mail === "string" ? mail : mail.address))
+      .map((mail) => mail.toLowerCase());
+    if (!acceptedOwnerEmails.includes(ownerEmail)) {
+      res.status(502).json({ error: WITHDRAWAL_ERROR });
+      return;
+    }
+
+    const consumerResult = await mailer.sendMail({
+      from: mailFrom(),
+      to: verifiedEmail,
+      subject: `Eingangsbestaetigung Widerruf ${receiptReference}`,
+      html: buildWithdrawalConsumerEmail(withdrawal, contractReference, receiptReference, timestamp),
+    });
+
+    const acceptedEmails = (consumerResult.accepted ?? [])
+      .map((mail) => (typeof mail === "string" ? mail : mail.address))
+      .map((mail) => mail.toLowerCase());
+    if (!acceptedEmails.includes(verifiedEmail)) {
+      res.status(502).json({ error: WITHDRAWAL_ERROR });
+      return;
+    }
+
+    res.json({
+      success: true,
+      receiptReference,
+      receivedAt: timestamp,
+    });
+  } catch (err) {
+    safeLogError("Withdrawal processing failed", err);
+    res.status(400).json({ error: WITHDRAWAL_ERROR });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  GET /api/health
+// ─────────────────────────────────────────────
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({
+    gemini: Boolean(process.env.GEMINI_API_KEY),
+    exa: Boolean(process.env.EXA_API_KEY),
+    stripe: Boolean(process.env.STRIPE_SECRET_KEY),
+    stripeWebhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+    smtp: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+    ownerEmail: Boolean(process.env.OWNER_EMAIL),
+    operatorContact: Boolean(process.env.OPERATOR_NAME && process.env.OPERATOR_ADDRESS && process.env.OPERATOR_EMAIL),
+    appUrl: Boolean(process.env.APP_URL || process.env.VERCEL_URL),
+  });
 });
 
 // Serve frontend (production local fallback)
@@ -418,7 +746,7 @@ export default app;
 if (!process.env.VERCEL) {
   const PORT = Number(process.env.PORT ?? 3001);
   app.listen(PORT, () => {
-    console.log(`\n🚀 Auto-Beratung Backend (Lokal) läuft auf Port ${PORT}`);
+    console.log(`\nAutoWunsch.com Backend läuft lokal auf Port ${PORT}`);
     console.log(`   → Gemini API: ${process.env.GEMINI_API_KEY ? "✅ Key vorhanden" : "❌ Key fehlt!"}`);
     console.log(`   → Stripe:     ${process.env.STRIPE_SECRET_KEY ? "✅ Key vorhanden" : "⚠️  Key fehlt (Checkout/Webhook deaktiviert)"}`);
   });
@@ -427,66 +755,132 @@ if (!process.env.VERCEL) {
 // ─────────────────────────────────────────────
 //  E-Mail Templates
 // ─────────────────────────────────────────────
-function buildOwnerEmail(meta: Record<string, string>, session: Stripe.Checkout.Session): string {
-  return `
-<!DOCTYPE html>
-<html lang="de">
-<head><meta charset="UTF-8"><style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; margin: 0; padding: 20px; }
-  .card { background: white; border-radius: 16px; padding: 32px; max-width: 560px; margin: auto; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-  h1 { color: #1a3a5c; font-size: 22px; margin: 0 0 4px; }
-  .badge { display: inline-block; background: #ff6b35; color: white; border-radius: 8px; padding: 4px 12px; font-size: 13px; font-weight: 700; margin-bottom: 24px; }
-  .row { display: flex; gap: 8px; margin-bottom: 10px; font-size: 15px; }
-  .label { font-weight: 700; color: #1a3a5c; min-width: 130px; }
-  .value { color: #334155; }
-  .notes { background: #f8fafc; border-left: 4px solid #ff6b35; padding: 12px 16px; border-radius: 0 8px 8px 0; font-style: italic; color: #475569; }
-  .footer { margin-top: 24px; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px; }
-</style></head>
-<body>
-  <div class="card">
-    <h1>🚗 Neue Beratungsanfrage eingegangen</h1>
-    <div class="badge">Zahlung bestätigt — ${(session.amount_total ?? 4900) / 100} EUR</div>
-    <div class="row"><span class="label">E-Mail:</span><span class="value">${meta.email ?? "—"}</span></div>
-    <div class="row"><span class="label">Budget:</span><span class="value">${meta.budget ? meta.budget + " €" : "Nicht angegeben"}</span></div>
-    <div class="row"><span class="label">Wunschmarke:</span><span class="value">${meta.brand || "Keine Präferenz"}</span></div>
-    <div class="row"><span class="label">Karosserietyp:</span><span class="value">${meta.bodyType ?? "—"}</span></div>
-    <div class="row"><span class="label">Getriebe:</span><span class="value">${meta.transmission ?? "—"}</span></div>
-    <div class="row"><span class="label">Antrieb:</span><span class="value">${meta.drive ?? "—"}</span></div>
-    ${meta.notes ? `<div class="row"><span class="label">Anmerkungen:</span></div><div class="notes">"${meta.notes}"</div>` : ""}
-    <div class="footer">
-      Stripe Session ID: ${session.id}<br>
-      Zeitpunkt: ${new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}
-    </div>
-  </div>
-</body>
-</html>`;
+export function buildWithdrawalReceiptReference(timestampIso: string): string {
+  const compact = timestampIso.replace(/\D/g, "").slice(0, 14);
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `WD-${compact}-${random}`;
 }
 
-function buildCustomerEmail(meta: Record<string, string>): string {
-  return `
-<!DOCTYPE html>
+function operatorContactHtml(): string {
+  const name = process.env.OPERATOR_NAME ?? "Enricha Einzelunternehmen, Timo Bieker";
+  const address = process.env.OPERATOR_ADDRESS ?? "Adresse siehe Impressum";
+  const email = process.env.OPERATOR_EMAIL ?? process.env.OWNER_EMAIL ?? process.env.SMTP_USER ?? "";
+  return `${escapeHtml(name)}<br>${escapeHtml(address)}<br>E-Mail: ${escapeHtml(email)}`;
+}
+
+function emailShell(title: string, body: string): string {
+  return `<!DOCTYPE html>
 <html lang="de">
 <head><meta charset="UTF-8"><style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; margin: 0; padding: 20px; }
-  .card { background: white; border-radius: 16px; padding: 32px; max-width: 520px; margin: auto; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-  h1 { color: #1a3a5c; font-size: 20px; }
-  p { color: #475569; font-size: 15px; line-height: 1.6; }
-  .highlight { background: #fff7f4; border-radius: 12px; padding: 16px 20px; margin: 20px 0; }
-  .highlight strong { color: #ff6b35; }
-  .footer { margin-top: 24px; font-size: 12px; color: #94a3b8; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; margin: 0; padding: 20px; color: #1f2937; }
+  .card { background: white; border-radius: 12px; padding: 28px; max-width: 680px; margin: auto; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+  h1 { color: #111827; font-size: 22px; margin: 0 0 18px; }
+  h2 { color: #111827; font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: #374151; font-size: 14px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align: left; vertical-align: top; border-bottom: 1px solid #e5e7eb; padding: 8px 0; font-size: 14px; }
+  th { width: 190px; color: #111827; }
+  .box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .muted { color: #6b7280; font-size: 12px; }
 </style></head>
-<body>
-  <div class="card">
-    <h1>✅ Deine Anfrage ist eingegangen!</h1>
-    <p>Vielen Dank für deine Buchung. Deine Beratungsanfrage wurde erfolgreich übermittelt und bezahlt.</p>
-    <div class="highlight">
-      <strong>Was passiert als nächstes?</strong><br>
-      Wir analysieren deine Kriterien und senden dir innerhalb von <strong>48 Stunden</strong> 3 handgeprüfte Auto-Empfehlungen mit direkten Kauf-Links per E-Mail zu.
+<body><div class="card"><h1>${escapeHtml(title)}</h1>${body}</div></body></html>`;
+}
+
+function buildOwnerEmail(meta: Record<string, string>, session: Stripe.Checkout.Session): string {
+  return emailShell(
+    "Neue bezahlte Beratungsanfrage",
+    `<p>Zahlung wurde von Stripe als bezahlt und abgeschlossen gemeldet.</p>
+    <table>
+      <tr><th>Referenz</th><td>${escapeHtml(session.id)}</td></tr>
+      <tr><th>Betrag</th><td>${escapeHtml(formatCents(session.amount_total, session.currency ?? "eur"))}</td></tr>
+      <tr><th>E-Mail</th><td>${escapeHtml(session.customer_details?.email ?? session.customer_email ?? meta.email ?? "")}</td></tr>
+      <tr><th>Service</th><td>${escapeHtml(meta.service ?? PRODUCT_NAME)}</td></tr>
+      <tr><th>Budget</th><td>${escapeHtml(meta.budget)}</td></tr>
+      <tr><th>Marke</th><td>${escapeHtml(meta.brand)}</td></tr>
+      <tr><th>Modell</th><td>${escapeHtml(meta.model)}</td></tr>
+      <tr><th>Max. Kilometer</th><td>${escapeHtml(meta.maxMileage)}</td></tr>
+      <tr><th>Karosserie</th><td>${escapeHtml(meta.bodyType)}</td></tr>
+      <tr><th>Getriebe</th><td>${escapeHtml(meta.transmission)}</td></tr>
+      <tr><th>Antrieb</th><td>${escapeHtml(meta.drive)}</td></tr>
+      <tr><th>Unfallfrei</th><td>${escapeHtml(meta.accidentFree)}</td></tr>
+      <tr><th>Farbe</th><td>${escapeHtml(meta.color)}</td></tr>
+      <tr><th>Notizen</th><td>${escapeHtml(meta.notes)}</td></tr>
+      <tr><th>AGB/Info</th><td>${escapeHtml(meta.acceptTerms)}</td></tr>
+      <tr><th>Start vor Widerrufsfrist</th><td>${escapeHtml(meta.startBeforeWithdrawal)}</td></tr>
+      <tr><th>Kenntnis Rechtsverlust</th><td>${escapeHtml(meta.acknowledgeWithdrawalLoss)}</td></tr>
+      <tr><th>Consent-Version</th><td>${escapeHtml(meta.consent_version)}</td></tr>
+      <tr><th>Bestellzeit</th><td>${escapeHtml(meta.ordered_at)}</td></tr>
+    </table>`,
+  );
+}
+
+function buildCustomerContractEmail(meta: Record<string, string>, session: Stripe.Checkout.Session, customerEmail: string): string {
+  return emailShell(
+    `Auftragsbestätigung ${PRODUCT_NAME}`,
+    `<p>Vielen Dank für deine Bestellung. Der Vertrag ist nach erfolgreicher Zahlung zustande gekommen.</p>
+    <div class="box">
+      <strong>Leistung:</strong> ${escapeHtml(meta.service ?? PRODUCT_NAME)}<br>
+      ${escapeHtml(SERVICE_DESCRIPTION)}<br>
+      <strong>Preis:</strong> ${escapeHtml(formatCents(session.amount_total, session.currency ?? "eur"))}
     </div>
-    <p>Budget: <strong>${meta.budget ? meta.budget + " €" : "Nicht angegeben"}</strong><br>
-    Karosserie: <strong>${meta.bodyType ?? "—"}</strong> | Getriebe: <strong>${meta.transmission ?? "—"}</strong></p>
-    <div class="footer">Bei Fragen antworte einfach auf diese E-Mail.</div>
-  </div>
-</body>
-</html>`;
+    <h2>Vertragsdaten</h2>
+    <table>
+      <tr><th>Vertragsreferenz</th><td>${escapeHtml(session.id)}</td></tr>
+      <tr><th>E-Mail</th><td>${escapeHtml(customerEmail)}</td></tr>
+      <tr><th>Bestellzeit</th><td>${escapeHtml(meta.ordered_at)}</td></tr>
+      <tr><th>Consent-Version</th><td>${escapeHtml(meta.consent_version ?? CONSENT_VERSION)}</td></tr>
+    </table>
+    <h2>Deine Kriterien</h2>
+    <table>
+      <tr><th>Budget</th><td>${escapeHtml(meta.budget)}</td></tr>
+      <tr><th>Marke</th><td>${escapeHtml(meta.brand)}</td></tr>
+      <tr><th>Modell</th><td>${escapeHtml(meta.model)}</td></tr>
+      <tr><th>Max. Kilometer</th><td>${escapeHtml(meta.maxMileage)}</td></tr>
+      <tr><th>Karosserie</th><td>${escapeHtml(meta.bodyType)}</td></tr>
+      <tr><th>Getriebe</th><td>${escapeHtml(meta.transmission)}</td></tr>
+      <tr><th>Antrieb</th><td>${escapeHtml(meta.drive)}</td></tr>
+      <tr><th>Unfallfrei</th><td>${escapeHtml(meta.accidentFree)}</td></tr>
+      <tr><th>Farbe</th><td>${escapeHtml(meta.color)}</td></tr>
+      <tr><th>Weitere Wünsche</th><td>${escapeHtml(meta.notes)}</td></tr>
+    </table>
+    <h2>Einwilligungen</h2>
+    <ul>
+      <li>Pflichtinformationen/AGB bestätigt: ${escapeHtml(meta.acceptTerms)}</li>
+      <li>Ausdrücklicher Start der Dienstleistung vor Ablauf der Widerrufsfrist: ${escapeHtml(meta.startBeforeWithdrawal)}</li>
+      <li>Kenntnis vom möglichen Erlöschen des Widerrufsrechts nach vollständiger Leistung: ${escapeHtml(meta.acknowledgeWithdrawalLoss)}</li>
+    </ul>
+    <h2>Widerruf und Kontakt</h2>
+    <p>Du kannst den Widerruf mit einer eindeutigen Erklärung per E-Mail oder über das bereitgestellte Widerrufsformular erklären. Es erfolgt kein automatischer Refund; der Widerruf wird nach rechtlicher Prüfung bearbeitet.</p>
+    <p>${operatorContactHtml()}</p>`,
+  );
+}
+
+function buildWithdrawalConsumerEmail(withdrawal: NormalizedWithdrawal, contractReference: string, receiptReference: string, timestamp: string): string {
+  return emailShell(
+    "Eingang deines Widerrufs",
+    `<p>Wir bestätigen den Eingang deiner Widerrufserklärung.</p>
+    <div class="box">
+      <strong>Erklärung:</strong> ${escapeHtml(withdrawal.declaration)}<br>
+      <strong>Vertragsreferenz:</strong> ${escapeHtml(contractReference)}<br>
+      <strong>Datum/Uhrzeit:</strong> ${escapeHtml(timestamp)}<br>
+      <strong>Belegnummer:</strong> ${escapeHtml(receiptReference)}
+    </div>
+    <p>Diese Bestätigung dokumentiert den Eingang. Sie ist keine automatische Rückerstattung.</p>
+    <p>${operatorContactHtml()}</p>`,
+  );
+}
+
+function buildWithdrawalOwnerEmail(withdrawal: NormalizedWithdrawal, contractReference: string, receiptReference: string, timestamp: string): string {
+  return emailShell(
+    "Widerruf eingegangen",
+    `<table>
+      <tr><th>Name</th><td>${escapeHtml(withdrawal.name)}</td></tr>
+      <tr><th>E-Mail</th><td>${escapeHtml(withdrawal.email)}</td></tr>
+      <tr><th>Vertragsreferenz</th><td>${escapeHtml(contractReference)}</td></tr>
+      <tr><th>Belegnummer</th><td>${escapeHtml(receiptReference)}</td></tr>
+      <tr><th>Datum/Uhrzeit</th><td>${escapeHtml(timestamp)}</td></tr>
+      <tr><th>Erklärung</th><td>${escapeHtml(withdrawal.declaration)}</td></tr>
+    </table>
+    <p>Keine automatische Rueckerstattung wurde ausgeloest.</p>`,
+  );
 }
