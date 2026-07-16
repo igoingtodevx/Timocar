@@ -7,7 +7,9 @@
  *   POST /api/stripe-webhook   → Stripe Webhook → E-Mail an Owner
  */
 
-import express, { Request, Response } from "express";
+import express from "express";
+import type { Request, Response } from "express";
+import { waitUntil } from "@vercel/functions";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
@@ -345,6 +347,41 @@ async function getExaContext(vehicle: string): Promise<string> {
 
 const app = express();
 
+async function processCompletedCheckout(event: Stripe.Event): Promise<void> {
+  // Best-effort only: Vercel memory is not durable. Hetzner needs an outbox/queue
+  // keyed by Stripe event and Checkout Session IDs for guaranteed fulfillment.
+  if (processedWebhookEvents.has(event.id)) return;
+
+  let session = event.data.object as Stripe.Checkout.Session;
+  session = await getStripe().checkout.sessions.retrieve(session.id);
+  if (!isPaidCompleteSession(session)) return;
+
+  const meta = session.metadata ?? {};
+  const mailer = getMailer();
+  const customerEmail = session.customer_details?.email ?? session.customer_email ?? meta.email;
+
+  if (customerEmail) {
+    await mailer.sendMail({
+      from: mailFrom(),
+      to: customerEmail,
+      subject: `Auftragsbestätigung ${PRODUCT_NAME}`,
+      html: buildCustomerContractEmail(meta, session, customerEmail),
+    });
+  }
+
+  await mailer.sendMail({
+    from: mailFrom(),
+    to: process.env.OWNER_EMAIL,
+    subject: `Neue bezahlte AutoWunsch-Bestellung ${session.id}`,
+    html: buildOwnerEmail(meta, session),
+  });
+  processedWebhookEvents.add(event.id);
+  if (processedWebhookEvents.size > 500) {
+    const oldest = processedWebhookEvents.values().next().value;
+    if (oldest) processedWebhookEvents.delete(oldest);
+  }
+}
+
 // Stripe webhook needs raw body — must be BEFORE express.json()
 app.post(
   "/api/stripe-webhook",
@@ -369,54 +406,12 @@ app.post(
     }
 
     if (event.type === "checkout.session.completed") {
-      // Best-effort idempotency only: Vercel serverless memory is not durable.
-      // Hetzner delivery needs a persistent DB/queue keyed by Stripe event ID and session ID.
-      if (processedWebhookEvents.has(event.id)) {
-        res.json({ received: true, duplicate: true });
-        return;
-      }
-
-      let session = event.data.object as Stripe.Checkout.Session;
-
-      try {
-        session = await getStripe().checkout.sessions.retrieve(session.id);
-        if (!isPaidCompleteSession(session)) {
-          res.json({ received: true });
-          return;
-        }
-
-        const meta = session.metadata ?? {};
-        const mailer = getMailer();
-        const customerEmail = session.customer_details?.email ?? session.customer_email ?? meta.email;
-
-        if (customerEmail) {
-          await mailer.sendMail({
-            from: mailFrom(),
-            to: customerEmail,
-            subject: `Auftragsbestätigung ${PRODUCT_NAME}`,
-            html: buildCustomerContractEmail(meta, session, customerEmail),
-          });
-        }
-
-        await mailer.sendMail({
-          from: mailFrom(),
-          to: process.env.OWNER_EMAIL,
-          subject: `Neue bezahlte AutoWunsch-Bestellung ${session.id}`,
-          html: buildOwnerEmail(meta, session),
-        });
-        processedWebhookEvents.add(event.id);
-        if (processedWebhookEvents.size > 500) {
-          const oldest = processedWebhookEvents.values().next().value;
-          if (oldest) processedWebhookEvents.delete(oldest);
-        }
-      } catch (mailErr) {
-        safeLogError("Webhook processing failed", mailErr);
-        res.status(500).json({ error: "Webhook processing failed" });
-        return;
-      }
+      waitUntil(processCompletedCheckout(event).catch((error) => {
+        safeLogError("Webhook post-checkout processing failed", error);
+      }));
     }
 
-    res.json({ received: true });
+    res.status(200).json({ received: true });
   }
 );
 

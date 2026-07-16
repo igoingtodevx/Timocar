@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import Stripe from "stripe";
 import {
   CONSENT_VERSION,
   PRODUCT_NAME,
@@ -146,6 +147,34 @@ test("backend safe session projection excludes criteria metadata", async () => {
     paymentStatus: "paid",
     product: PRODUCT_NAME,
   });
+});
+
+test("signed checkout webhooks are acknowledged before downstream Stripe or SMTP work", async (t) => {
+  const { default: app } = await import("../api/index.ts");
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const payload = JSON.stringify({
+    id: "evt_test_immediate_ack",
+    object: "event",
+    type: "checkout.session.completed",
+    data: { object: { id: "cs_test_immediate_ack" } },
+  });
+  const signature = new Stripe(process.env.STRIPE_SECRET_KEY!).webhooks.generateTestHeaderString({
+    payload,
+    secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  });
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/stripe-webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Stripe-Signature": signature },
+    body: payload,
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { received: true });
 });
 
 test("HTTP boundary rejects invalid checkout, lookup and withdrawal requests", async (t) => {
