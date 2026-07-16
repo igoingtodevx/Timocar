@@ -10,6 +10,7 @@
 import express from "express";
 import type { Request, Response } from "express";
 import { waitUntil } from "@vercel/functions";
+import { BlobPreconditionFailedError, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
@@ -75,9 +76,9 @@ function getMailer() {
 //  In-memory rate limiter & cache
 // ─────────────────────────────────────────────
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const processedWebhookEvents = new Set<string>();
 const RATE_LIMIT = 3;
 const RATE_WINDOW_MS = 60_000;
+const MAX_ANALYSIS_QUERY_LENGTH = 120;
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -132,6 +133,14 @@ type NormalizedWithdrawal = {
 
 function getClientIp(req: Request): string {
   return (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+}
+
+export function normalizeVehicleAnalysisInput(query: unknown): { value: string; cacheKey: string; error?: never } | { error: string } {
+  if (typeof query !== "string") return { error: "Bitte gib ein gültiges Automodell ein." };
+  const value = query.trim().replace(/\s+/g, " ");
+  if (!value) return { error: "Bitte gib ein Automodell ein." };
+  if (value.length > MAX_ANALYSIS_QUERY_LENGTH) return { error: `Bitte beschränke die Anfrage auf ${MAX_ANALYSIS_QUERY_LENGTH} Zeichen.` };
+  return { value, cacheKey: value.toLowerCase() };
 }
 
 function trimString(value: unknown, maxLength: number): string {
@@ -347,39 +356,170 @@ async function getExaContext(vehicle: string): Promise<string> {
 
 const app = express();
 
-async function processCompletedCheckout(event: Stripe.Event): Promise<void> {
-  // Best-effort only: Vercel memory is not durable. Hetzner needs an outbox/queue
-  // keyed by Stripe event and Checkout Session IDs for guaranteed fulfillment.
-  if (processedWebhookEvents.has(event.id)) return;
+export type StripeOutboxStatus =
+  | "received"
+  | "owner_pending"
+  | "owner_notified"
+  | "owner_failed"
+  | "customer_pending"
+  | "customer_notified"
+  | "customer_failed"
+  | "customer_skipped"
+  | "verification_failed";
 
+export type StripeWebhookOutbox = {
+  reserve(eventId: string, sessionId: string): Promise<"created" | "duplicate">;
+  updateStatus(eventId: string, status: StripeOutboxStatus): Promise<void>;
+};
+
+type StripeOutboxRecord = {
+  eventId: string;
+  sessionId: string;
+  status: StripeOutboxStatus;
+  receivedAt: string;
+  updatedAt: string;
+};
+
+function outboxPath(eventId: string): string {
+  // Stripe event IDs are signed input. Restrict the pathname nevertheless so it
+  // cannot turn into a path traversal or accidentally disclose data via a URL.
+  return `stripe-outbox/${eventId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+}
+
+function serializeOutboxRecord(record: StripeOutboxRecord): string {
+  return JSON.stringify(record);
+}
+
+class BlobStripeWebhookOutbox implements StripeWebhookOutbox {
+  async reserve(eventId: string, sessionId: string): Promise<"created" | "duplicate"> {
+    const pathname = outboxPath(eventId);
+    const now = new Date().toISOString();
+    const record: StripeOutboxRecord = {
+      eventId,
+      sessionId,
+      status: "received",
+      receivedAt: now,
+      updatedAt: now,
+    };
+
+    try {
+      await putBlob(pathname, serializeOutboxRecord(record), {
+        access: "private",
+        addRandomSuffix: false,
+        contentType: "application/json",
+      });
+      return "created";
+    } catch (error) {
+      // Blob rejects overwrites by default. A successful head after that error
+      // means this exact Stripe event was durably reserved by another delivery.
+      try {
+        await headBlob(pathname);
+        return "duplicate";
+      } catch {
+        throw error;
+      }
+    }
+  }
+
+  async updateStatus(eventId: string, status: StripeOutboxStatus): Promise<void> {
+    const pathname = outboxPath(eventId);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = await getBlob(pathname, { access: "private", useCache: false });
+      if (!current || !current.stream) {
+        throw new Error(`Stripe outbox record is missing for ${eventId}`);
+      }
+      const record = JSON.parse(await new Response(current.stream).text()) as StripeOutboxRecord;
+      const next: StripeOutboxRecord = { ...record, status, updatedAt: new Date().toISOString() };
+      try {
+        await putBlob(pathname, serializeOutboxRecord(next), {
+          access: "private",
+          allowOverwrite: true,
+          contentType: "application/json",
+          ifMatch: current.blob.etag,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof BlobPreconditionFailedError && attempt < 2) continue;
+        throw error;
+      }
+    }
+  }
+}
+
+let webhookOutbox: StripeWebhookOutbox = new BlobStripeWebhookOutbox();
+
+// Test-only seam: production always uses the private Vercel Blob store.
+export function setWebhookOutboxForTests(outbox?: StripeWebhookOutbox): void {
+  webhookOutbox = outbox ?? new BlobStripeWebhookOutbox();
+}
+
+async function persistStatus(outbox: StripeWebhookOutbox, eventId: string, status: StripeOutboxStatus): Promise<void> {
+  await outbox.updateStatus(eventId, status);
+}
+
+type CheckoutPostProcessor = (event: Stripe.Event, outbox: StripeWebhookOutbox) => Promise<void>;
+
+async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebhookOutbox): Promise<void> {
   let session = event.data.object as Stripe.Checkout.Session;
-  session = await getStripe().checkout.sessions.retrieve(session.id);
-  if (!isPaidCompleteSession(session)) return;
+  try {
+    await persistStatus(outbox, event.id, "owner_pending");
+    session = await getStripe().checkout.sessions.retrieve(session.id);
+    if (!isPaidCompleteSession(session)) {
+      await persistStatus(outbox, event.id, "verification_failed");
+      return;
+    }
+
+    const meta = session.metadata ?? {};
+    const mailer = getMailer();
+    await mailer.sendMail({
+      from: mailFrom(),
+      to: process.env.OWNER_EMAIL,
+      subject: `Neue bezahlte AutoWunsch-Bestellung ${session.id}`,
+      html: buildOwnerEmail(meta, session),
+    });
+    await persistStatus(outbox, event.id, "owner_notified");
+  } catch (error) {
+    try {
+      await persistStatus(outbox, event.id, "owner_failed");
+    } catch (statusError) {
+      safeLogError("Stripe outbox could not persist owner failure", statusError);
+    }
+    throw error;
+  }
 
   const meta = session.metadata ?? {};
   const mailer = getMailer();
   const customerEmail = session.customer_details?.email ?? session.customer_email ?? meta.email;
 
-  if (customerEmail) {
+  if (!customerEmail) {
+    await persistStatus(outbox, event.id, "customer_skipped");
+    return;
+  }
+
+  try {
+    await persistStatus(outbox, event.id, "customer_pending");
     await mailer.sendMail({
       from: mailFrom(),
       to: customerEmail,
       subject: `Auftragsbestätigung ${PRODUCT_NAME}`,
       html: buildCustomerContractEmail(meta, session, customerEmail),
     });
+    await persistStatus(outbox, event.id, "customer_notified");
+  } catch (error) {
+    try {
+      await persistStatus(outbox, event.id, "customer_failed");
+    } catch (statusError) {
+      safeLogError("Stripe outbox could not persist customer failure", statusError);
+    }
+    throw error;
   }
+}
 
-  await mailer.sendMail({
-    from: mailFrom(),
-    to: process.env.OWNER_EMAIL,
-    subject: `Neue bezahlte AutoWunsch-Bestellung ${session.id}`,
-    html: buildOwnerEmail(meta, session),
-  });
-  processedWebhookEvents.add(event.id);
-  if (processedWebhookEvents.size > 500) {
-    const oldest = processedWebhookEvents.values().next().value;
-    if (oldest) processedWebhookEvents.delete(oldest);
-  }
+let checkoutPostProcessor: CheckoutPostProcessor = processCompletedCheckout;
+
+// Test-only seam: HTTP production code always schedules processCompletedCheckout.
+export function setCheckoutPostProcessorForTests(processor?: CheckoutPostProcessor): void {
+  checkoutPostProcessor = processor ?? processCompletedCheckout;
 }
 
 // Stripe webhook needs raw body — must be BEFORE express.json()
@@ -405,10 +545,31 @@ app.post(
       return;
     }
 
-    if (event.type === "checkout.session.completed") {
-      waitUntil(processCompletedCheckout(event).catch((error) => {
-        safeLogError("Webhook post-checkout processing failed", error);
-      }));
+    if (event.type !== "checkout.session.completed") {
+      res.status(200).json({ received: true });
+      return;
+    }
+
+    const sessionId = (event.data.object as { id?: unknown }).id;
+    if (typeof sessionId !== "string" || !isStripeSessionReference(sessionId)) {
+      safeLogError("Stripe webhook has no usable Checkout Session ID", new Error(event.id));
+      res.status(503).json({ error: "Webhook event could not be reserved" });
+      return;
+    }
+
+    try {
+      const outbox = webhookOutbox;
+      const processor = checkoutPostProcessor;
+      const reservation = await outbox.reserve(event.id, sessionId);
+      if (reservation === "created") {
+        waitUntil(processor(event, outbox).catch((error) => {
+          safeLogError("Webhook post-checkout processing failed", error);
+        }));
+      }
+    } catch (error) {
+      safeLogError("Stripe webhook durable reservation failed", error);
+      res.status(503).json({ error: "Webhook event could not be reserved" });
+      return;
     }
 
     res.status(200).json({ received: true });
@@ -422,38 +583,39 @@ app.use(express.json({ limit: "20kb" }));
 //  POST /api/analyze-car
 // ─────────────────────────────────────────────
 app.post("/api/analyze-car", async (req: Request, res: Response) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
   const { query } = req.body as { query?: string };
-
-  if (!query || query.trim().length === 0) {
-    res.status(400).json({ error: "Bitte gib ein Automodell ein." });
+  const input = normalizeVehicleAnalysisInput(query);
+  if ("error" in input) {
+    res.status(400).json({ error: input.error });
     return;
   }
 
-  const normalizedQuery = query.trim().toLowerCase().slice(0, 200);
-
-  // Exa-Grounding: aktuelle Web-Auszüge holen und in die Analyse einbetten
-  let exaContext = "";
-  try {
-    exaContext = await getExaContext(query.trim());
-  } catch (exaErr) {
-    console.warn("⚠️ Exa-Grounding fehlgeschlagen, fahre ohne Kontext fort:", exaErr instanceof Error ? exaErr.message : exaErr);
+  if (process.env.AI_ANALYSIS_ENABLED === "false") {
+    res.status(503).json({ error: "Der KI-Fahrzeugcheck ist derzeit nicht verfügbar." });
+    return;
   }
-  const groundedQuery = exaContext
-    ? query.trim() + "\n\n=== AKTUELLE WEB-RECHERCHE (stütze alle Zahlen auf diese Quellen) ===\n" + exaContext
-    : query.trim();
 
-
-  if (!checkRateLimit(ip)) {
+  if (!checkRateLimit(`analysis:${getClientIp(req)}`)) {
     res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
     return;
   }
 
-  const cached = getCached(normalizedQuery);
+  const cached = getCached(input.cacheKey);
   if (cached) {
     res.json(cached);
     return;
   }
+
+  // Exa-Grounding: aktuelle Web-Auszüge holen und in die Analyse einbetten
+  let exaContext = "";
+  try {
+    exaContext = await getExaContext(input.value);
+  } catch (exaErr) {
+    console.warn("⚠️ Exa-Grounding fehlgeschlagen, fahre ohne Kontext fort:", exaErr instanceof Error ? exaErr.message : exaErr);
+  }
+  const groundedQuery = exaContext
+    ? input.value + "\n\n=== AKTUELLE WEB-RECHERCHE (stütze alle Zahlen auf diese Quellen) ===\n" + exaContext
+    : input.value;
 
   try {
     const systemInstruction = `Du bist ein erfahrener deutschsprachiger KFZ-Experte und Fahrzeug-Analyst.
@@ -476,38 +638,19 @@ Wichtig:
 - Falls du das Modell nicht eindeutig identifizieren kannst, gib im Feld "name" an, was du verstanden hast, und erkläre in "details", dass du keine gesicherten Daten gefunden hast.
 - Gib niemals rein erfundene Daten als Fakten aus. Lieber "Keine gesicherten Daten verfügbar" schreiben.`;
 
-    let response;
-    try {
-      console.log("Attempting vehicle analysis using primary model: gemini-3.1-flash-lite");
-      response = await genai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${groundedQuery}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
-          },
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.2,
+    const response = await genai.models.generateContent({
+      model: process.env.GEMINI_ANALYSIS_MODEL?.trim() || "gemini-3.1-flash-lite",
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${groundedQuery}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
         },
-      });
-    } catch (err) {
-      console.warn("Primary model (gemini-3.1-flash-lite) failed. Falling back to gemini-3.5-flash. Error:", err instanceof Error ? err.message : err);
-      response = await genai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `Analysiere dieses Fahrzeug für einen deutschen Käufer: "${groundedQuery}"\n\nAntworte AUSSCHLIESSLICH als valides JSON-Objekt in EXAKT diesem Schema, ohne Markdown, ohne Erläuterungstext davor oder danach:\n{"name":"...","leistung":"...","verbrauch":"...","wertverlust":"...","maengel":"...","details":"..."}` }],
-          },
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.2,
-        },
-      });
-    }
+      ],
+      config: {
+        systemInstruction,
+        temperature: 0.2,
+      },
+    });
 
     const rawText = response.text ?? "";
     if (!rawText) {
@@ -544,7 +687,7 @@ Wichtig:
       }
     }
 
-    setCache(normalizedQuery, carData);
+    setCache(input.cacheKey, carData);
     res.json(carData);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unbekannter Fehler";

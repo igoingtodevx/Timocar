@@ -20,7 +20,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  Star,
+
   Undo2,
   X,
 } from "lucide-react";
@@ -192,10 +192,8 @@ export default function App() {
     const handler = () => {
       const aboutEl = document.getElementById("about-me");
       const bookingEl = document.getElementById("booking-section");
-      const reviewsEl = document.getElementById("reviews");
       const scrollPoint = window.scrollY + window.innerHeight / 3;
-      if (reviewsEl && scrollPoint >= reviewsEl.offsetTop) setActiveSection("reviews");
-      else if (bookingEl && scrollPoint >= bookingEl.offsetTop) setActiveSection("booking-section");
+      if (bookingEl && scrollPoint >= bookingEl.offsetTop) setActiveSection("booking-section");
       else if (aboutEl && scrollPoint >= aboutEl.offsetTop) setActiveSection("about-me");
       else setActiveSection("home");
     };
@@ -366,7 +364,7 @@ export default function App() {
     { label: "KI-Fahrzeugcheck", section: "ai-tool", action: () => { setActiveView("ai-tool"); window.scrollTo({ top: 0, behavior: "smooth" }); } },
     { label: "Über Timo", section: "about-me", action: (event) => scrollToSection("about-me", event) },
     { label: PRODUCT_NAME, section: "booking-section", action: (event) => scrollToSection("booking-section", event) },
-    { label: "Bewertungen", section: "reviews", action: (event) => scrollToSection("reviews", event) },
+
   ];
 
   const renderSelect = (
@@ -737,40 +735,7 @@ export default function App() {
               </div>
             </section>
 
-            <section id="reviews" className="scroll-mt-16 border-t border-[#1A1A1A] py-24 md:py-32">
-              <div className="mx-auto max-w-7xl px-6 md:px-8 lg:px-12">
-                <div className="mb-12 flex flex-col justify-between gap-6 md:flex-row md:items-end">
-                  <div>
-                    <span className="mb-4 block text-[10px] font-bold uppercase tracking-[0.3em] text-brand-orange">Kundenstimmen</span>
-                    <h2 className="font-display text-4xl font-black leading-tight text-white md:text-5xl">Direkt verwertbare<br />Empfehlungen.</h2>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-display text-2xl font-black text-white">4.8</span>
-                    <div className="flex text-brand-orange">{[...Array(5)].map((_, i) => <Star key={i} className="h-4 w-4 fill-current" />)}</div>
-                    <span className="text-sm text-white/70">148 Bewertungen</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                  {[
-                    { title: "Endlich konkrete Inserate", text: "Ich hatte nach der Autoempfehlung drei Links, die wirklich zu meinem Budget gepasst haben. Kein Ratespiel mehr.", name: "Mika S.", time: "vor 2 Wochen" },
-                    { title: "Sehr klare Einordnung", text: "Timo hat nicht einfach Modelle genannt, sondern erklärt, welche Ausstattung und Laufleistung für mich sinnvoll ist.", name: "Lena K.", time: "vor 1 Monat" },
-                    { title: "49 € gut investiert", text: "Die Empfehlung kam schnell und hat mir geholfen, ein schlechtes Inserat direkt auszusortieren.", name: "Jonas W.", time: "vor 3 Wochen" },
-                  ].map(({ title, text, name, time }) => (
-                    <div key={name} className="flex flex-col rounded-xl border border-[#222222] bg-[#111111] p-7 transition-colors hover:border-[#333333]">
-                      <div className="mb-5 flex text-brand-orange">{[...Array(5)].map((_, i) => <Star key={i} className="h-4 w-4 fill-current" />)}</div>
-                      <blockquote className="flex-grow space-y-2">
-                        <p className="text-sm font-bold text-white">{title}</p>
-                        <p className="text-sm leading-relaxed text-white/85">"{text}"</p>
-                      </blockquote>
-                      <div className="mt-6 flex items-center justify-between border-t border-[#1A1A1A] pt-5">
-                        <span className="text-sm font-bold text-white">{name}</span>
-                        <span className="text-xs text-white/60">{time}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
+
           </>
         ) : (
           <section id="ai-tool" className="min-h-[calc(100vh-64px)] scroll-mt-16 py-16 md:py-24">
@@ -979,7 +944,7 @@ export default function App() {
                   <p className="font-semibold text-white">Verarbeitete Daten und Zwecke</p>
                   <p>Wir verarbeiten die von Ihnen eingegebenen Bestelldaten (Budget, Marke, Modell, maximale Kilometer, Karosserietyp, Getriebe, Antrieb, Unfallfreiheit, Farbe, weitere Wünsche und E-Mail), um {PRODUCT_NAME} zu erstellen, die Zahlung abzuwickeln, Rückfragen zu beantworten und gesetzliche Nachweise zu führen. Rechtsgrundlagen sind Art. 6 Abs. 1 lit. b DSGVO für Vertragserfüllung, Art. 6 Abs. 1 lit. c DSGVO für gesetzliche Pflichten und Art. 6 Abs. 1 lit. f DSGVO für Sicherheit und Missbrauchsschutz.</p>
                   <p className="font-semibold text-white">Hosting, Zahlung, E-Mail und Serverlogs</p>
-                  <p>AutoWunsch.com wird aktuell über Vercel bereitgestellt. Vercel verarbeitet technische Zugriffsdaten und Serverlogs wie IP-Adresse, Zeitpunkt, URL, Statuscode und Browserdaten zur Auslieferung, Sicherheit und Fehleranalyse. Zahlungen laufen über Stripe; Stripe verarbeitet Zahlungs- und Checkout-Daten eigenverantwortlich bzw. als Dienstleister. E-Mails werden über einen SMTP-Dienst versendet; dafür werden Empfängeradresse, Inhalt und Versandmetadaten verarbeitet.</p>
+                  <p>AutoWunsch.com wird aktuell über Vercel bereitgestellt. Vercel verarbeitet technische Zugriffsdaten und Serverlogs wie IP-Adresse, Zeitpunkt, URL, Statuscode und Browserdaten zur Auslieferung, Sicherheit und Fehleranalyse. Zur zuverlässigen Verarbeitung bestätigter Zahlungen speichern wir zusätzlich minimal die Stripe-Event-ID, die Checkout-Session-ID, Zeitstempel und Bearbeitungsstatus in einem privaten Vercel-Blob-Speicher; vollständige Bestell- oder Mailinhalte werden dort nicht abgelegt. Zahlungen laufen über Stripe; Stripe verarbeitet Zahlungs- und Checkout-Daten eigenverantwortlich bzw. als Dienstleister. E-Mails werden über einen SMTP-Dienst versendet; dafür werden Empfängeradresse, Inhalt und Versandmetadaten verarbeitet.</p>
                   <p className="font-semibold text-white">Speicherdauer</p>
                   <p>Bestell- und Zahlungsnachweise speichern wir, solange dies für Vertragserfüllung, steuerliche und handelsrechtliche Aufbewahrungspflichten erforderlich ist. Serverlogs werden nur so lange gespeichert, wie sie für Betrieb, Sicherheit und Fehleranalyse benötigt werden. Kontakt- und Widerrufsanfragen speichern wir bis zur abschließenden Bearbeitung und nach Maßgabe gesetzlicher Nachweisfristen.</p>
                   <p className="font-semibold text-white">Ihre Rechte</p>

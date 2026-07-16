@@ -149,8 +149,31 @@ test("backend safe session projection excludes criteria metadata", async () => {
   });
 });
 
-test("signed checkout webhooks are acknowledged before downstream Stripe or SMTP work", async (t) => {
-  const { default: app } = await import("../api/index.ts");
+test("vehicle analysis accepts bounded text input only", async () => {
+  const { normalizeVehicleAnalysisInput } = await import("../api/index.ts");
+
+  assert.deepEqual(normalizeVehicleAnalysisInput("  BMW M3 (G80)  "), {
+    value: "BMW M3 (G80)",
+    cacheKey: "bmw m3 (g80)",
+  });
+  assert.equal(normalizeVehicleAnalysisInput(" ").error, "Bitte gib ein Automodell ein.");
+  assert.equal(normalizeVehicleAnalysisInput({ model: "BMW" }).error, "Bitte gib ein gültiges Automodell ein.");
+  assert.equal(normalizeVehicleAnalysisInput("A".repeat(121)).error, "Bitte beschränke die Anfrage auf 120 Zeichen.");
+});
+
+test("signed checkout webhooks persist a new event before acknowledging it", async (t) => {
+  const { default: app, setCheckoutPostProcessorForTests, setWebhookOutboxForTests } = await import("../api/index.ts");
+  const reservations: { eventId: string; sessionId: string }[] = [];
+  setWebhookOutboxForTests({
+    async reserve(eventId, sessionId) {
+      reservations.push({ eventId, sessionId });
+      return "created";
+    },
+    async updateStatus() {},
+  });
+  setCheckoutPostProcessorForTests(async () => {});
+  t.after(() => setWebhookOutboxForTests());
+  t.after(() => setCheckoutPostProcessorForTests());
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   t.after(() => server.close());
@@ -161,7 +184,7 @@ test("signed checkout webhooks are acknowledged before downstream Stripe or SMTP
     id: "evt_test_immediate_ack",
     object: "event",
     type: "checkout.session.completed",
-    data: { object: { id: "cs_test_immediate_ack" } },
+    data: { object: { id: "cs_test_immediateack" } },
   });
   const signature = new Stripe(process.env.STRIPE_SECRET_KEY!).webhooks.generateTestHeaderString({
     payload,
@@ -175,6 +198,84 @@ test("signed checkout webhooks are acknowledged before downstream Stripe or SMTP
   });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { received: true });
+  assert.deepEqual(reservations, [{ eventId: "evt_test_immediate_ack", sessionId: "cs_test_immediateack" }]);
+});
+
+test("duplicate checkout events are acknowledged without a second processing reservation", async (t) => {
+  const { default: app, setCheckoutPostProcessorForTests, setWebhookOutboxForTests } = await import("../api/index.ts");
+  const seen = new Set<string>();
+  let reserveCalls = 0;
+  setWebhookOutboxForTests({
+    async reserve(eventId) {
+      reserveCalls += 1;
+      if (seen.has(eventId)) return "duplicate";
+      seen.add(eventId);
+      return "created";
+    },
+    async updateStatus() {},
+  });
+  setCheckoutPostProcessorForTests(async () => {});
+  t.after(() => setWebhookOutboxForTests());
+  t.after(() => setCheckoutPostProcessorForTests());
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const payload = JSON.stringify({
+    id: "evt_test_duplicate",
+    object: "event",
+    type: "checkout.session.completed",
+    data: { object: { id: "cs_test_duplicate" } },
+  });
+  const signature = new Stripe(process.env.STRIPE_SECRET_KEY!).webhooks.generateTestHeaderString({
+    payload,
+    secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  });
+  const request = () => fetch(`http://127.0.0.1:${address.port}/api/stripe-webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Stripe-Signature": signature },
+    body: payload,
+  });
+
+  assert.equal((await request()).status, 200);
+  assert.equal((await request()).status, 200);
+  assert.equal(reserveCalls, 2);
+});
+
+test("checkout events are not acknowledged when durable reservation fails", async (t) => {
+  const { default: app, setWebhookOutboxForTests } = await import("../api/index.ts");
+  setWebhookOutboxForTests({
+    async reserve() {
+      throw new Error("storage unavailable");
+    },
+    async updateStatus() {},
+  });
+  t.after(() => setWebhookOutboxForTests());
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const payload = JSON.stringify({
+    id: "evt_test_storage_failure",
+    object: "event",
+    type: "checkout.session.completed",
+    data: { object: { id: "cs_test_storagefailure" } },
+  });
+  const signature = new Stripe(process.env.STRIPE_SECRET_KEY!).webhooks.generateTestHeaderString({
+    payload,
+    secret: process.env.STRIPE_WEBHOOK_SECRET!,
+  });
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/stripe-webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Stripe-Signature": signature },
+    body: payload,
+  });
+
+  assert.equal(response.status, 503);
 });
 
 test("HTTP boundary rejects invalid checkout, lookup and withdrawal requests", async (t) => {
