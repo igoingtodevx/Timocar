@@ -24,6 +24,8 @@ import {
   Undo2,
   X,
 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
 import {
   ACCIDENT_OPTIONS,
   BODY_TYPES,
@@ -89,6 +91,10 @@ const socialHandle = "@YoTimoLifestyle";
 const tiktokUrl = "https://www.tiktok.com/@YoTimoLifestyle";
 const instagramUrl = "https://www.instagram.com/YoTimoLifestyle";
 
+const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+const CHECKOUT_MODE = import.meta.env.VITE_CHECKOUT_MODE === "embedded" ? "embedded" : "hosted";
+const stripePromise = STRIPE_PUBLISHABLE_KEY ? loadStripe(STRIPE_PUBLISHABLE_KEY) : null;
+
 function priceLabel() {
   return `${(PRODUCT_PRICE_CENTS / 100).toLocaleString("de-DE", { minimumFractionDigits: 0 })} €`;
 }
@@ -152,6 +158,8 @@ export default function App() {
   const [formErrors, setFormErrors] = useState<OrderFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
   const [checkoutDetails, setCheckoutDetails] = useState<CheckoutDetails | null>(null);
   const [checkoutLookupError, setCheckoutLookupError] = useState<string | null>(null);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
@@ -307,16 +315,39 @@ export default function App() {
         body: JSON.stringify(orderForm),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) {
+      if (!res.ok) {
         setCheckoutError(data.error ?? "Checkout konnte nicht gestartet werden.");
         return;
       }
-      window.location.href = data.url;
+
+      if (CHECKOUT_MODE === "embedded") {
+        if (!data.clientSecret || !data.sessionId) {
+          setCheckoutError("Der eingebettete Checkout konnte nicht gestartet werden.");
+          return;
+        }
+        setCheckoutClientSecret(data.clientSecret);
+        setCheckoutSessionId(data.sessionId);
+        return;
+      }
+
+      if (!data.url) {
+        setCheckoutError("Checkout konnte nicht gestartet werden.");
+        return;
+      }
+      window.location.assign(data.url);
     } catch {
       setCheckoutError("Verbindung fehlgeschlagen.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleEmbeddedCheckoutComplete = () => {
+    if (!checkoutSessionId) {
+      setCheckoutError("Checkout-Referenz fehlt. Bitte starte die Bestellung erneut.");
+      return;
+    }
+    window.location.assign(`/?payment=success&session_id=${encodeURIComponent(checkoutSessionId)}`);
   };
 
   const handleResetForm = () => {
@@ -668,6 +699,32 @@ export default function App() {
                         )}
                         <button onClick={handleResetForm} className="cursor-pointer rounded-lg border border-[#2A2A2A] px-5 py-3 text-sm font-bold text-white transition-colors hover:border-[#444444]">
                           Neue Anfrage starten
+                        </button>
+                      </div>
+                    ) : checkoutClientSecret && checkoutSessionId && CHECKOUT_MODE === "embedded" ? (
+                      <div className="space-y-5 p-6 md:p-8">
+                        <div className="rounded-lg border border-brand-orange/40 bg-brand-orange/10 p-4 text-sm leading-relaxed text-white/90">
+                          <p className="font-bold text-white">Sicher bezahlen, ohne diese Seite zu verlassen.</p>
+                          <p className="mt-1">Der Stripe-Checkout ist direkt eingebettet. Deine Bestellangaben bleiben erhalten, auch im TikTok-In-App-Browser.</p>
+                        </div>
+                        {!stripePromise ? (
+                          <div className="flex items-start gap-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-red-200">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <p className="text-sm font-semibold">Der sichere Zahlungsbereich ist momentan nicht verfügbar. Bitte versuche es später erneut.</p>
+                          </div>
+                        ) : (
+                          <div className="min-h-[540px] overflow-hidden rounded-lg bg-white">
+                            <EmbeddedCheckoutProvider
+                              key={checkoutSessionId}
+                              stripe={stripePromise}
+                              options={{ clientSecret: checkoutClientSecret, onComplete: handleEmbeddedCheckoutComplete }}
+                            >
+                              <EmbeddedCheckout />
+                            </EmbeddedCheckoutProvider>
+                          </div>
+                        )}
+                        <button onClick={handleResetForm} className="w-full cursor-pointer rounded-lg border border-[#2A2A2A] px-5 py-3 text-sm font-bold text-white transition-colors hover:border-[#444444]">
+                          Bestellung abbrechen
                         </button>
                       </div>
                     ) : (

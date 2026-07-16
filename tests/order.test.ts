@@ -149,6 +149,29 @@ test("backend safe session projection excludes criteria metadata", async () => {
   });
 });
 
+test("embedded checkout config uses Stripe inline mode and a same-origin return URL", async () => {
+  const { buildCheckoutSessionParams } = await import("../api/index.ts");
+  const metadata = { service: PRODUCT_NAME, email: validOrder.email };
+  const params = buildCheckoutSessionParams(validOrder, metadata, "embedded");
+
+  assert.equal(params.ui_mode, "embedded_page");
+  assert.equal(params.return_url, "https://example.com/?payment=success&session_id={CHECKOUT_SESSION_ID}");
+  assert.equal("success_url" in params, false);
+  assert.equal("cancel_url" in params, false);
+  assert.equal(params.line_items?.[0]?.price_data?.currency, "eur");
+  assert.equal(params.line_items?.[0]?.price_data?.unit_amount, PRODUCT_PRICE_CENTS);
+});
+
+test("hosted checkout config retains the top-level success and cancellation URLs", async () => {
+  const { buildCheckoutSessionParams } = await import("../api/index.ts");
+  const metadata = { service: PRODUCT_NAME, email: validOrder.email };
+  const params = buildCheckoutSessionParams(validOrder, metadata, "hosted");
+
+  assert.equal(params.success_url, "https://example.com/?payment=success&session_id={CHECKOUT_SESSION_ID}");
+  assert.equal(params.cancel_url, "https://example.com/?payment=cancelled");
+  assert.equal("ui_mode" in params, false);
+});
+
 test("vehicle analysis accepts bounded text input only", async () => {
   const { normalizeVehicleAnalysisInput } = await import("../api/index.ts");
 

@@ -696,6 +696,49 @@ Wichtig:
   }
 });
 
+export type CheckoutMode = "hosted" | "embedded";
+
+export function buildCheckoutSessionParams(
+  order: OrderFormData,
+  metadata: Record<string, string>,
+  checkoutMode: CheckoutMode,
+): Stripe.Checkout.SessionCreateParams {
+  const base: Stripe.Checkout.SessionCreateParams = {
+    mode: "payment",
+    customer_email: order.email,
+    locale: "de",
+    line_items: [
+      {
+        price_data: {
+          currency: "eur",
+          unit_amount: PRODUCT_PRICE_CENTS,
+          product_data: {
+            name: PRODUCT_NAME,
+            description: "AutoWunsch.com / Autoempfehlung Premium: 3 handgepruefte Fahrzeuglinks von Verkaufsplattformen innerhalb von 48 Stunden.",
+          },
+        },
+        quantity: 1,
+      },
+    ],
+    metadata,
+    payment_intent_data: { metadata },
+  };
+
+  if (checkoutMode === "embedded") {
+    return {
+      ...base,
+      ui_mode: "embedded_page",
+      return_url: `${appUrl()}${CHECKOUT_SUCCESS_PATH}`,
+    };
+  }
+
+  return {
+    ...base,
+    success_url: `${appUrl()}${CHECKOUT_SUCCESS_PATH}`,
+    cancel_url: `${appUrl()}${CHECKOUT_CANCEL_PATH}`,
+  };
+}
+
 // ─────────────────────────────────────────────
 //  POST /api/create-checkout
 // ─────────────────────────────────────────────
@@ -718,32 +761,28 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
   const orderedAt = new Date().toISOString();
   const metadata = buildOrderMetadata(order, orderedAt);
 
-  try {
-    const session = await getStripe().checkout.sessions.create({
-      mode: "payment",
-      customer_email: order.email,
-      locale: "de",
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            unit_amount: PRODUCT_PRICE_CENTS,
-            product_data: {
-              name: PRODUCT_NAME,
-              description: "AutoWunsch.com / Autoempfehlung Premium: 3 handgepruefte Fahrzeuglinks von Verkaufsplattformen innerhalb von 48 Stunden.",
-            },
-          },
-          quantity: 1,
-        },
-      ],
-      metadata,
-      payment_intent_data: {
-        metadata,
-      },
-      success_url: `${appUrl()}${CHECKOUT_SUCCESS_PATH}`,
-      cancel_url: `${appUrl()}${CHECKOUT_CANCEL_PATH}`,
-    });
+  const checkoutMode: CheckoutMode = process.env.CHECKOUT_MODE === "embedded" ? "embedded" : "hosted";
 
+  try {
+    const session = await getStripe().checkout.sessions.create(
+      buildCheckoutSessionParams(order, metadata, checkoutMode),
+    );
+
+    if (checkoutMode === "embedded") {
+      if (!session.client_secret) {
+        safeLogError("Stripe Embedded Checkout missing client secret", new Error(session.id));
+        res.status(500).json({ error: "Eingebetteter Checkout konnte nicht gestartet werden. Bitte versuche es erneut." });
+        return;
+      }
+      res.json({ clientSecret: session.client_secret, sessionId: session.id });
+      return;
+    }
+
+    if (!session.url) {
+      safeLogError("Stripe Hosted Checkout missing URL", new Error(session.id));
+      res.status(500).json({ error: "Checkout konnte nicht gestartet werden. Bitte versuche es erneut." });
+      return;
+    }
     res.json({ url: session.url });
   } catch (err: unknown) {
     safeLogError("Stripe Checkout error", err);
