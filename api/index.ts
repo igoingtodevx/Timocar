@@ -26,6 +26,28 @@ import {
   validateOrderForm,
   hasOrderFormErrors,
 } from "../shared/order.js";
+import {
+  canStartCheckout,
+  resolveAdminRole,
+  normalizeAdminOrderUpdate,
+  normalizeStorefrontSettings,
+} from "../shared/admin.js";
+import {
+  createMagicLink,
+  databaseConfigured,
+  deleteAdminSession,
+  getAdminSession,
+  getStorefrontSettings,
+  listOrders,
+  recordPaidOrder,
+  redeemMagicLink,
+  reserveStripeWebhookEvent,
+  setOrderEmailStatus,
+  setStorefrontSettings,
+  updateStripeWebhookEvent,
+  updateOrder,
+  writeAuditLog,
+} from "./admin-store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -133,6 +155,68 @@ type NormalizedWithdrawal = {
 
 function getClientIp(req: Request): string {
   return (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+}
+
+const ADMIN_COOKIE = "timocar_admin_session";
+
+function getCookie(req: Request, name: string): string | undefined {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return undefined;
+  const prefix = `${name}=`;
+  const match = cookieHeader.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  return match ? decodeURIComponent(match.slice(prefix.length)) : undefined;
+}
+
+function ownerEmails(): string {
+  return process.env.ADMIN_OWNER_EMAILS?.trim() || process.env.ADMIN_EMAILS?.trim() || process.env.OWNER_EMAIL?.trim() || "";
+}
+
+function staffEmails(): string {
+  return process.env.ADMIN_STAFF_EMAILS?.trim() || "";
+}
+
+function isProductionCookie(): boolean {
+  return process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+}
+
+function setAdminCookie(res: Response, token: string): void {
+  res.cookie(ADMIN_COOKIE, token, {
+    httpOnly: true,
+    secure: isProductionCookie(),
+    sameSite: "lax",
+    path: "/",
+    maxAge: 12 * 60 * 60_000,
+  });
+}
+
+function clearAdminCookie(res: Response): void {
+  res.clearCookie(ADMIN_COOKIE, { httpOnly: true, secure: isProductionCookie(), sameSite: "lax", path: "/" });
+}
+
+async function requireAdmin(req: Request, res: Response): Promise<{ email: string; role: "owner" | "staff" } | null> {
+  if (!databaseConfigured()) {
+    res.status(503).json({ error: "Das Betreiber-Dashboard ist noch nicht eingerichtet." });
+    return null;
+  }
+  try {
+    const session = await getAdminSession(getCookie(req, ADMIN_COOKIE));
+    if (!session) {
+      res.status(401).json({ error: "Bitte melde dich an." });
+      return null;
+    }
+    return session;
+  } catch (error) {
+    safeLogError("Admin session lookup failed", error);
+    res.status(503).json({ error: "Dashboard ist vorübergehend nicht verfügbar." });
+    return null;
+  }
+}
+
+function requireSameOrigin(req: Request, res: Response): boolean {
+  const origin = req.headers.origin;
+  if (!origin || origin === appUrl()) return true;
+  res.status(403).json({ error: "Ungültige Anfragequelle." });
+  return false;
 }
 
 export function normalizeVehicleAnalysisInput(query: unknown): { value: string; cacheKey: string; error?: never } | { error: string } {
@@ -446,11 +530,26 @@ class BlobStripeWebhookOutbox implements StripeWebhookOutbox {
   }
 }
 
-let webhookOutbox: StripeWebhookOutbox = new BlobStripeWebhookOutbox();
+class PostgresStripeWebhookOutbox implements StripeWebhookOutbox {
+  reserve(eventId: string, sessionId: string): Promise<"created" | "duplicate"> {
+    return reserveStripeWebhookEvent(eventId, sessionId);
+  }
 
-// Test-only seam: production always uses the private Vercel Blob store.
+  updateStatus(eventId: string, status: StripeOutboxStatus): Promise<void> {
+    return updateStripeWebhookEvent(eventId, status);
+  }
+}
+
+function defaultWebhookOutbox(): StripeWebhookOutbox {
+  return databaseConfigured() ? new PostgresStripeWebhookOutbox() : new BlobStripeWebhookOutbox();
+}
+
+let webhookOutbox: StripeWebhookOutbox = defaultWebhookOutbox();
+
+// Tests may supply a deterministic in-memory outbox. Production uses Postgres
+// on the managed host and retains private Blob only for the legacy Vercel host.
 export function setWebhookOutboxForTests(outbox?: StripeWebhookOutbox): void {
-  webhookOutbox = outbox ?? new BlobStripeWebhookOutbox();
+  webhookOutbox = outbox ?? defaultWebhookOutbox();
 }
 
 async function persistStatus(outbox: StripeWebhookOutbox, eventId: string, status: StripeOutboxStatus): Promise<void> {
@@ -470,6 +569,7 @@ async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebho
     }
 
     const meta = session.metadata ?? {};
+    await recordPaidOrder(session);
     const mailer = getMailer();
     await mailer.sendMail({
       from: mailFrom(),
@@ -481,6 +581,7 @@ async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebho
   } catch (error) {
     try {
       await persistStatus(outbox, event.id, "owner_failed");
+      await setOrderEmailStatus(session.id, "failed");
     } catch (statusError) {
       safeLogError("Stripe outbox could not persist owner failure", statusError);
     }
@@ -493,6 +594,7 @@ async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebho
 
   if (!customerEmail) {
     await persistStatus(outbox, event.id, "customer_skipped");
+    await setOrderEmailStatus(session.id, "sent");
     return;
   }
 
@@ -505,9 +607,11 @@ async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebho
       html: buildCustomerContractEmail(meta, session, customerEmail),
     });
     await persistStatus(outbox, event.id, "customer_notified");
+    await setOrderEmailStatus(session.id, "sent");
   } catch (error) {
     try {
       await persistStatus(outbox, event.id, "customer_failed");
+      await setOrderEmailStatus(session.id, "failed");
     } catch (statusError) {
       safeLogError("Stripe outbox could not persist customer failure", statusError);
     }
@@ -578,6 +682,147 @@ app.post(
 
 // All other routes parse JSON
 app.use(express.json({ limit: "20kb" }));
+
+// ─────────────────────────────────────────────
+//  Storefront availability + operator dashboard
+// ─────────────────────────────────────────────
+app.get("/api/storefront-state", async (_req: Request, res: Response) => {
+  try {
+    res.json(await getStorefrontSettings());
+  } catch (error) {
+    safeLogError("Storefront settings lookup failed", error);
+    res.status(503).json({ error: "Shop-Status ist vorübergehend nicht verfügbar." });
+  }
+});
+
+app.post("/api/admin/auth/request-link", async (req: Request, res: Response) => {
+  const email = trimString((req.body as { email?: unknown }).email, 254).toLowerCase();
+  if (!checkRateLimit(`admin-login:${getClientIp(req)}`)) {
+    res.status(429).json({ error: "Bitte warte kurz, bevor du einen neuen Link anforderst." });
+    return;
+  }
+
+  // Keep the response identical for allow- and deny-listed addresses.
+  const role = resolveAdminRole(email, ownerEmails(), staffEmails());
+  if (!databaseConfigured() || !role) {
+    res.json({ accepted: true });
+    return;
+  }
+
+  try {
+    const { token } = await createMagicLink(email, role);
+    const verificationUrl = `${appUrl()}/api/admin/auth/verify?token=${encodeURIComponent(token)}`;
+    await getMailer().sendMail({
+      from: mailFrom(),
+      to: email,
+      subject: "Dein sicherer Login-Link für AutoWunsch",
+      html: emailShell(
+        "Betreiber-Dashboard",
+        `<p>Mit diesem einmalig verwendbaren Link meldest du dich sicher im Betreiber-Dashboard an.</p><p><a href="${escapeHtml(verificationUrl)}">Jetzt sicher anmelden</a></p><p class="muted">Der Link läuft nach 15 Minuten ab. Falls du ihn nicht angefordert hast, kannst du diese E-Mail ignorieren.</p>`,
+      ),
+    });
+    res.json({ accepted: true });
+  } catch (error) {
+    safeLogError("Admin magic link could not be sent", error);
+    res.status(503).json({ error: "Login-Link konnte gerade nicht gesendet werden." });
+  }
+});
+
+app.get("/api/admin/auth/verify", async (req: Request, res: Response) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!databaseConfigured() || token.length < 32) {
+    res.status(400).send("Dieser Login-Link ist ungültig oder abgelaufen.");
+    return;
+  }
+  try {
+    const redeemed = await redeemMagicLink(token);
+    if (!redeemed) {
+      res.status(400).send("Dieser Login-Link ist ungültig oder abgelaufen.");
+      return;
+    }
+    setAdminCookie(res, redeemed.sessionToken);
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.redirect(302, "/admin");
+  } catch (error) {
+    safeLogError("Admin magic link redemption failed", error);
+    res.status(503).send("Dashboard ist vorübergehend nicht verfügbar.");
+  }
+});
+
+app.post("/api/admin/logout", async (req: Request, res: Response) => {
+  if (!requireSameOrigin(req, res)) return;
+  try {
+    await deleteAdminSession(getCookie(req, ADMIN_COOKIE));
+    clearAdminCookie(res);
+    res.status(204).end();
+  } catch (error) {
+    safeLogError("Admin logout failed", error);
+    res.status(503).json({ error: "Abmeldung konnte nicht durchgeführt werden." });
+  }
+});
+
+app.get("/api/admin/bootstrap", async (req: Request, res: Response) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  try {
+    const [settings, orders] = await Promise.all([getStorefrontSettings(), listOrders()]);
+    res.json({ admin: { email: admin.email, role: admin.role }, settings, orders });
+  } catch (error) {
+    safeLogError("Admin dashboard loading failed", error);
+    res.status(503).json({ error: "Dashboard ist vorübergehend nicht verfügbar." });
+  }
+});
+
+app.patch("/api/admin/settings/storefront", async (req: Request, res: Response) => {
+  if (!requireSameOrigin(req, res)) return;
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  if (admin.role !== "owner") {
+    res.status(403).json({ error: "Nur Inhaber dürfen neue Anfragen aktivieren oder pausieren." });
+    return;
+  }
+  const settings = normalizeStorefrontSettings(req.body as Record<string, unknown>);
+  if ("error" in settings) {
+    res.status(400).json({ error: settings.error });
+    return;
+  }
+  try {
+    const saved = await setStorefrontSettings(settings, admin.email);
+    await writeAuditLog(admin.email, saved.acceptingOrders ? "storefront.enabled" : "storefront.paused", "storefront", "primary", saved);
+    res.json(saved);
+  } catch (error) {
+    safeLogError("Storefront settings update failed", error);
+    res.status(503).json({ error: "Shop-Status konnte nicht gespeichert werden." });
+  }
+});
+
+app.patch("/api/admin/orders/:sessionId", async (req: Request, res: Response) => {
+  if (!requireSameOrigin(req, res)) return;
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const sessionId = trimString(req.params.sessionId, 120);
+  if (!isStripeSessionReference(sessionId)) {
+    res.status(400).json({ error: "Ungültige Bestellreferenz." });
+    return;
+  }
+  const update = normalizeAdminOrderUpdate(req.body as Record<string, unknown>);
+  if ("error" in update) {
+    res.status(400).json({ error: update.error });
+    return;
+  }
+  try {
+    const order = await updateOrder(sessionId, update, admin.email);
+    if (!order) {
+      res.status(404).json({ error: "Bestellung wurde nicht gefunden." });
+      return;
+    }
+    await writeAuditLog(admin.email, "order.updated", "order", sessionId, { status: order.status });
+    res.json({ order });
+  } catch (error) {
+    safeLogError("Admin order update failed", error);
+    res.status(503).json({ error: "Bestellung konnte nicht gespeichert werden." });
+  }
+});
 
 // ─────────────────────────────────────────────
 //  POST /api/analyze-car
@@ -749,6 +994,19 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
     return;
   }
 
+  let storefrontSettings;
+  try {
+    storefrontSettings = await getStorefrontSettings();
+  } catch (error) {
+    safeLogError("Checkout storefront settings lookup failed", error);
+    res.status(503).json({ error: "Bestellungen sind vorübergehend nicht verfügbar. Bitte versuche es später erneut." });
+    return;
+  }
+  if (!canStartCheckout(storefrontSettings)) {
+    res.status(503).json({ error: "Wir nehmen derzeit keine neuen Anfragen an. Bitte versuche es später erneut." });
+    return;
+  }
+
   const { data: order, errors, valid } = validateAndNormalizeOrder(req.body as Record<string, unknown>);
   if (!valid) {
     res.status(400).json({
@@ -912,9 +1170,13 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-// Serve frontend (production local fallback)
+// Serve the SPA on App Platform / a Node host. Vercel's rewrite serves this
+// itself, while this fallback makes direct /admin visits work outside Vercel.
 const distPath = path.join(__dirname, "../dist");
 app.use(express.static(distPath));
+app.get(/^\/(?!api(?:\/|$)).*/, (_req: Request, res: Response) => {
+  res.sendFile(path.join(distPath, "index.html"));
+});
 
 // Export default for Vercel Serverless Function
 export default app;
