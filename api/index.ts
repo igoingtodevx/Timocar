@@ -1017,12 +1017,15 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
     return;
   }
   if (!canStartCheckout(storefrontSettings)) {
-    res.status(503).json({ error: "Wir nehmen derzeit keine neuen Anfragen an. Bitte versuche es später erneut." });
+    // App Platform replaces upstream 503 responses with a generic 504 page.
+    // 409 keeps the intentional storefront pause actionable in the customer UI.
+    res.status(409).json({ error: "Wir nehmen derzeit keine neuen Anfragen an. Bitte versuche es später erneut." });
     return;
   }
   if (!paymentFulfillmentConfigured()) {
     safeLogError("Checkout blocked: payment fulfillment is not configured", new Error("Missing Stripe, owner, or SMTP configuration"));
-    res.status(503).json({ error: "Bestellungen sind vorübergehend nicht verfügbar. Bitte versuche es später erneut." });
+    // See note above: this is a deliberate launch-state gate, not an outage.
+    res.status(409).json({ error: "Bestellungen sind vorübergehend nicht verfügbar. Bitte versuche es später erneut." });
     return;
   }
 
