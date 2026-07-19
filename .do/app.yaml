@@ -1,0 +1,33 @@
+# DigitalOcean deployment baseline — AutoWunsch / Timocar
+# This is intentionally declarative. Values marked SECRET must be set through
+# DigitalOcean's encrypted environment-variable UI/API, never committed here.
+name: timocar
+region: fra
+services:
+  - name: web
+    github:
+      repo: igoingtodevx/Timocar
+      branch: main
+      deploy_on_push: true
+    build_command: npm ci && npm run build
+    run_command: npm run server
+    http_port: 3001
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    routes:
+      - path: /
+    envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
+      - key: DATABASE_SSL
+        value: "true"
+        scope: RUN_TIME
+      # Attach the managed Postgres cluster in App Platform after it is created.
+      # App Platform injects DATABASE_URL for the attached database; do not commit it.
+      # Add these as encrypted secrets at deployment time:
+      # APP_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+      # VITE_STRIPE_PUBLISHABLE_KEY (BUILD_TIME and RUN_TIME),
+      # CHECKOUT_MODE=embedded, VITE_CHECKOUT_MODE=embedded,
+      # SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM,
+      # OWNER_EMAIL, ADMIN_OWNER_EMAILS, ADMIN_STAFF_EMAILS, GEMINI_API_KEY, EXA_API_KEY.
