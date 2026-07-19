@@ -8,6 +8,7 @@ import {
   resolveAdminRole,
   type StorefrontSettings,
 } from "../shared/admin.js";
+import { sanitizeDatabaseConnectionString } from "../api/admin-store.js";
 
 test("storefront settings default to accepting new orders and can be paused", () => {
   const defaultSettings = normalizeStorefrontSettings({});
@@ -53,4 +54,11 @@ test("settings input rejects non-boolean values instead of silently changing che
   const updatedSettings = normalizeStorefrontSettings({ acceptingOrders: false }, current);
   if ("error" in updatedSettings) throw new Error(updatedSettings.error);
   assert.deepEqual(updatedSettings, { acceptingOrders: false });
+});
+
+test("database URI SSL parameters do not override the configured TLS policy", () => {
+  assert.equal(
+    sanitizeDatabaseConnectionString("postgresql://user:pass@db.example:25060/defaultdb?sslmode=require&application_name=timocar"),
+    "postgresql://user:pass@db.example:25060/defaultdb?application_name=timocar",
+  );
 });
