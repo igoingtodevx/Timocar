@@ -9,6 +9,7 @@ import {
   type StorefrontSettings,
 } from "../shared/admin.js";
 import { sanitizeDatabaseConnectionString } from "../api/admin-store.js";
+import { summarizeOperatorOrders } from "../src/admin-dashboard.ts";
 
 test("storefront settings default to accepting new orders and can be paused", () => {
   const defaultSettings = normalizeStorefrontSettings({});
@@ -54,6 +55,27 @@ test("settings input rejects non-boolean values instead of silently changing che
   const updatedSettings = normalizeStorefrontSettings({ acceptingOrders: false }, current);
   if ("error" in updatedSettings) throw new Error(updatedSettings.error);
   assert.deepEqual(updatedSettings, { acceptingOrders: false });
+});
+
+test("overview summary counts only real operational request statuses", () => {
+  const summary = summarizeOperatorOrders([
+    { status: "new" },
+    { status: "in_progress" },
+    { status: "awaiting_customer" },
+    { status: "completed" },
+    { status: "cancelled" },
+    { status: "new" },
+  ]);
+
+  assert.deepEqual(summary, {
+    total: 6,
+    new: 2,
+    inProgress: 1,
+    awaitingCustomer: 1,
+    completed: 1,
+    cancelled: 1,
+    needsAttention: 3,
+  });
 });
 
 test("database URI SSL parameters do not override the configured TLS policy", () => {
