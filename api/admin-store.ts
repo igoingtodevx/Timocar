@@ -28,10 +28,21 @@ type Queryable = { query: (text: string, values?: unknown[]) => Promise<{ rowCou
 
 let pool: Pool | undefined;
 
+export function sanitizeDatabaseConnectionString(connectionString: string): string {
+  const url = new URL(connectionString);
+  for (const parameter of ["ssl", "sslmode", "sslcert", "sslkey", "sslrootcert"]) {
+    url.searchParams.delete(parameter);
+  }
+  return url.toString();
+}
+
 function db(): Queryable {
   const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) throw new Error("DATABASE_URL is missing");
-  pool ??= new Pool({ connectionString, ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false } });
+  pool ??= new Pool({
+    connectionString: sanitizeDatabaseConnectionString(connectionString),
+    ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+  });
   return pool;
 }
 
