@@ -94,6 +94,20 @@ function getMailer() {
   });
 }
 
+// A checkout must never be opened when the paid order cannot be delivered to
+// both the operator and the customer. This is a launch gate, not just a health
+// warning, so a temporary configuration gap cannot create stranded payments.
+export function paymentFulfillmentConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(
+    env.STRIPE_SECRET_KEY?.trim()
+    && env.STRIPE_WEBHOOK_SECRET?.trim()
+    && env.OWNER_EMAIL?.trim()
+    && env.SMTP_HOST?.trim()
+    && env.SMTP_USER?.trim()
+    && env.SMTP_PASS?.trim(),
+  );
+}
+
 // ─────────────────────────────────────────────
 //  In-memory rate limiter & cache
 // ─────────────────────────────────────────────
@@ -1004,6 +1018,11 @@ app.post("/api/create-checkout", async (req: Request, res: Response) => {
   }
   if (!canStartCheckout(storefrontSettings)) {
     res.status(503).json({ error: "Wir nehmen derzeit keine neuen Anfragen an. Bitte versuche es später erneut." });
+    return;
+  }
+  if (!paymentFulfillmentConfigured()) {
+    safeLogError("Checkout blocked: payment fulfillment is not configured", new Error("Missing Stripe, owner, or SMTP configuration"));
+    res.status(503).json({ error: "Bestellungen sind vorübergehend nicht verfügbar. Bitte versuche es später erneut." });
     return;
   }
 

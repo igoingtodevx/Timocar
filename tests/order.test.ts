@@ -91,6 +91,22 @@ test("backend order normalization trims text and metadata stores criteria and co
   assert.equal(metadata.ordered_at, "2026-07-13T12:00:00.000Z");
 });
 
+test("checkout fulfillment gate requires Stripe, an operator, and SMTP delivery", async () => {
+  const { paymentFulfillmentConfigured } = await import("../api/index.ts");
+  const complete = {
+    STRIPE_SECRET_KEY: "sk_test_123",
+    STRIPE_WEBHOOK_SECRET: "whsec_123",
+    OWNER_EMAIL: "owner@example.com",
+    SMTP_HOST: "smtp.example.com",
+    SMTP_USER: "smtp-user",
+    SMTP_PASS: "smtp-pass",
+  } as NodeJS.ProcessEnv;
+
+  assert.equal(paymentFulfillmentConfigured(complete), true);
+  assert.equal(paymentFulfillmentConfigured({ ...complete, SMTP_PASS: "" }), false);
+  assert.equal(paymentFulfillmentConfigured({ ...complete, OWNER_EMAIL: undefined }), false);
+});
+
 test("backend withdrawal normalization accepts only Stripe checkout references", async () => {
   const { normalizeWithdrawalInput } = await import("../api/index.ts");
 
