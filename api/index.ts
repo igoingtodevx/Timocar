@@ -10,7 +10,8 @@
  *   GET  /api/checkout-draft/:t  → Draft einmalig laden
  */
 
-import express, { Request, Response } from "express";
+import express from "express";
+import type { Request, Response } from "express";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
