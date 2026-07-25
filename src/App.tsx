@@ -46,6 +46,8 @@ import {
   EmbeddedCheckoutProvider,
   EmbeddedCheckout,
 } from "@stripe/react-stripe-js";
+import { PayPalProvider } from "@paypal/react-paypal-js/sdk-v6";
+import { usePayPalOneTimePaymentSession } from "@paypal/react-paypal-js/sdk-v6";
 
 // ─────────────────────────────────────────────
 //  Stripe Setup
@@ -54,6 +56,13 @@ const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as st
 const CHECKOUT_MODE = (import.meta.env.VITE_CHECKOUT_MODE === "embedded" ? "embedded" : "hosted") as
   | "hosted"
   | "embedded";
+
+// PayPal (Sandbox default; set VITE_PAYPAL_ENVIRONMENT=production for live)
+const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID as string | undefined;
+const PAYPAL_ENVIRONMENT = ((import.meta.env.VITE_PAYPAL_ENVIRONMENT as string) || "sandbox")
+  .toLowerCase() === "production"
+  ? "production"
+  : "sandbox";
 
 // loadStripe gibt Promise<Stripe | null>. Wir halten die Promise auf
 // Module-Ebene, damit sie nicht bei jedem Render neu erzeugt wird.
@@ -122,6 +131,13 @@ export default function App() {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
 
+  // TikTok-In-App-Browser: wird im mount-Block berechnet, entscheidet ob PayPal separat angezeigt wird
+  const [isTikTokInApp, setIsTikTokInApp] = useState<boolean>(false);
+
+  // PayPal State
+  const [paypalProcessing, setPaypalProcessing] = useState(false);
+  const [paypalError, setPaypalError] = useState<string | null>(null);
+
   // Doppelklick-Schutz: Referenz auf laufende Request-Promise
   const inFlightCheckout = useRef<Promise<void> | null>(null);
 
@@ -146,6 +162,7 @@ export default function App() {
     }
 
     likelyInApp.current = isLikelyInAppBrowser();
+    setIsTikTokInApp(likelyInApp.current);
 
     // Optional: Draft-Token aus URL (?draft=…) — nur für User, die im
     // TikTok-Browser auf "Im Browser öffnen" geklickt haben.
@@ -273,6 +290,8 @@ export default function App() {
             notes: form.notes,
             email: form.email,
             source,
+            // TikTok-Browser bekommt serverseitig PayPal aus der Stripe-Session entfernt
+            // (s. UA-Check in /api/create-checkout).
           }),
         });
         const data = await res.json();
@@ -324,7 +343,13 @@ export default function App() {
     setCheckoutSessionId(null);
     setCheckoutError(null);
     setShowFallbackHint(false);
+    setPaypalProcessing(false);
+    setPaypalError(null);
   };
+
+  // PayPal-Zahlung wird über die TikTokPayPalButton-Subkomponente verarbeitet
+  // (siehe Datei-Ende). Diese Komponente bekommt das `form`-Objekt + `source`
+  // als Props und macht createOrder / captureOrder serverseitig.
 
   // ─── Embedded Checkout: onComplete → formSubmitted ───
   const handleEmbeddedComplete = useCallback(() => {
@@ -630,7 +655,7 @@ export default function App() {
                         </button>
                       </div>
                     ) : checkoutClientSecret && CHECKOUT_MODE === "embedded" ? (
-                      // ─── EMBEDDED CHECKOUT ───
+                      // ─── EMBEDDED CHECKOUT (Stripe) ───
                       <div className="p-4 md:p-6">
                         {!STRIPE_PUBLISHABLE_KEY && (
                           <div className="mb-4 p-3 bg-red-950/20 border border-red-900/50 rounded-lg flex items-start gap-2.5 text-red-400 text-xs">
@@ -652,8 +677,36 @@ export default function App() {
                             </div>
                           </EmbeddedCheckoutProvider>
                         )}
+
+                        {/* TikTok-In-App-Browser: separater PayPal-v6-Button (presentationMode: "modal") */}
+                        {isTikTokInApp && PAYPAL_CLIENT_ID && (
+                          <div className="mt-6 pt-6 border-t border-[#1A1A1A]">
+                            <p className="text-xs text-zinc-500 mb-3 text-center">
+                              Oder mit PayPal bezahlen (im TikTok-Browser als Modal):
+                            </p>
+                            <PayPalProvider
+                              clientId={PAYPAL_CLIENT_ID}
+                              environment={PAYPAL_ENVIRONMENT}
+                              components={["paypal-payments"]}
+                              pageType="checkout"
+                            >
+                              <TikTokPayPalButton
+                                form={form}
+                                source={source}
+                                disabled={paypalProcessing || !form.email.trim()}
+                                onError={setPaypalError}
+                                onSuccess={() => setFormSubmitted(true)}
+                                onProcessingChange={setPaypalProcessing}
+                              />
+                            </PayPalProvider>
+                            {paypalError && (
+                              <p className="mt-2 text-xs text-red-400 text-center">{paypalError}</p>
+                            )}
+                          </div>
+                        )}
+
                         <button
-                          onClick={() => { setCheckoutClientSecret(null); setCheckoutSessionId(null); setCheckoutError(null); }}
+                          onClick={() => { setCheckoutClientSecret(null); setCheckoutSessionId(null); setCheckoutError(null); setPaypalError(null); }}
                           className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1.5"
                         >
                           <X className="w-3.5 h-3.5" /> Formular zurücksetzen
@@ -1076,5 +1129,86 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+//  TikTok-PayPal-Button: nutzt usePayPalOneTimePaymentSession Hook
+//  mit explizitem presentationMode: "modal" (TikTok-sicher).
+//  Die PayPal-SDK-Reference v6 dokumentiert diesen Modus als speziell
+//  für WebView-Szenarien vorgesehen.
+// ─────────────────────────────────────────────
+interface TikTokPayPalButtonProps {
+  form: CheckoutFormState;
+  source: string;
+  disabled: boolean;
+  onError: (msg: string) => void;
+  onSuccess: () => void;
+  onProcessingChange: (busy: boolean) => void;
+}
+
+function TikTokPayPalButton({ form, source, disabled, onError, onSuccess, onProcessingChange }: TikTokPayPalButtonProps) {
+  const { isPending, handleClick } = usePayPalOneTimePaymentSession({
+    // presentationMode: "modal" = TikTok-sicher (iframe-Overlay, KEIN redirect).
+    // Per PayPal-SDK-v6-Referenz speziell für WebView-Szenarien empfohlen.
+    presentationMode: "modal",
+    createOrder: async () => {
+      const res = await fetch("/api/paypal/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, email: form.email, source }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "PayPal-Order konnte nicht erstellt werden.");
+      }
+      const data = (await res.json()) as { id: string };
+      return { orderId: data.id };
+    },
+    onApprove: async (data) => {
+      if (!data.orderId) {
+        onError("PayPal hat keine orderId zurückgegeben.");
+        return;
+      }
+      try {
+        const res = await fetch("/api/paypal/capture-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: data.orderId }),
+        });
+        const payload = (await res.json().catch(() => ({}))) as { status?: string; error?: string };
+        if (!res.ok || payload.status !== "COMPLETED") {
+          throw new Error(payload.error ?? "PayPal-Capture nicht autorisiert.");
+        }
+        onSuccess();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "PayPal-Capture fehlgeschlagen.";
+        onError(msg);
+      }
+    },
+    onCancel: () => onError("PayPal-Zahlung abgebrochen. Du kannst es erneut versuchen."),
+    onError: (err) => onError(err instanceof Error ? err.message : "PayPal-Fehler aufgetreten."),
+  });
+
+  // Processing-State an Parent weitergeben
+  React.useEffect(() => {
+    onProcessingChange(isPending);
+  }, [isPending, onProcessingChange]);
+
+  return (
+    <button
+      type="button"
+      disabled={disabled || isPending}
+      onClick={() => {
+        // presentationMode ist bereits im Hook-Props auf "modal" gesetzt.
+        // handleClick() ist parameterlos.
+        handleClick();
+      }}
+      className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#FFC439] hover:bg-[#FFB400] disabled:opacity-50 disabled:cursor-not-allowed text-[#003087] text-sm font-bold rounded-lg transition-colors"
+    >
+      <span className="italic text-base">Pay</span>
+      <span className="font-bold">Pal</span>
+      {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+    </button>
   );
 }
