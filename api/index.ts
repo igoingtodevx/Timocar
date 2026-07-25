@@ -25,13 +25,13 @@ import {
   type OrderFormData,
   validateOrderForm,
   hasOrderFormErrors,
-} from "../shared/order.js";
+} from "../shared/order.ts";
 import {
   canStartCheckout,
   resolveAdminRole,
   normalizeAdminOrderUpdate,
   normalizeStorefrontSettings,
-} from "../shared/admin.js";
+} from "../shared/admin.ts";
 import {
   createMagicLink,
   databaseConfigured,
@@ -47,7 +47,7 @@ import {
   updateStripeWebhookEvent,
   updateOrder,
   writeAuditLog,
-} from "./admin-store.js";
+} from "./admin-store.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
