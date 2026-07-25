@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import type { AdminOrderStatus, AdminRole, StorefrontSettings } from "../shared/admin.js";
+import type { AdminOrderStatus, AdminRole, StorefrontSettings } from "../shared/admin.ts";
 
 type PaidCheckoutSession = {
   id: string;
