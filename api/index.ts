@@ -185,7 +185,7 @@ function setAdminCookie(res: Response, token: string): void {
     secure: isProductionCookie(),
     sameSite: "lax",
     path: "/",
-    maxAge: 12 * 60 * 60_000,
+    maxAge: 30 * 24 * 60 * 60_000,
   });
 }
 

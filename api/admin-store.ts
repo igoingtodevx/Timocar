@@ -163,7 +163,7 @@ export async function redeemMagicLink(token: string): Promise<{ sessionToken: st
   if (typeof email !== "string" || (role !== "owner" && role !== "staff")) return null;
 
   const sessionToken = newToken();
-  const expiresAt = new Date(Date.now() + 12 * 60 * 60_000);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60_000);
   await db().query("DELETE FROM admin_sessions WHERE expires_at < NOW()");
   await db().query(
     "INSERT INTO admin_sessions (token_hash, email, role, expires_at) VALUES ($1, $2, $3, $4)",
