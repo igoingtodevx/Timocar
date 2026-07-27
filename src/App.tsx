@@ -83,7 +83,7 @@ const legalContact = {
   business: "Enricha Einzelunternehmen",
   name: "Timo Bieker",
   address: ["c/o Postflex #10093", "Emsdettener Str. 10", "48268 Greven"],
-  email: "enricha@web.de",
+  email: "support@autowunsch.com",
   phone: "+49 151 20280600",
 };
 
@@ -916,6 +916,7 @@ export default function App() {
           <div className="space-y-0.5 text-center md:text-left">
             <p className="font-display text-sm font-black uppercase tracking-wide text-white">AutoWunsch.com</p>
             <p>© 2026 Enricha Einzelunternehmen. Produkt: {PRODUCT_NAME}.</p>
+            <p>Fragen? <a className="text-brand-orange transition-colors hover:text-white" href={`mailto:${legalContact.email}`}>{legalContact.email}</a></p>
           </div>
           <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 font-medium" aria-label="Rechtliches">
             <button onClick={() => setActiveModal("withdrawal")} className="cursor-pointer font-bold text-brand-orange transition-colors hover:text-white">Vertrag widerrufen</button>
