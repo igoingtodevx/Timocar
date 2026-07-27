@@ -713,8 +713,11 @@ app.post("/api/admin/auth/request-link", async (req: Request, res: Response) => 
 
   try {
     const { token } = await createMagicLink(email, role);
+    res.json({ accepted: true });
+
+    // Fire-and-forget: nicht auf SMTP warten (DO App Platform timeout bei Brevo)
     const verificationUrl = `${appUrl()}/api/admin/auth/verify?token=${encodeURIComponent(token)}`;
-    await getMailer().sendMail({
+    getMailer().sendMail({
       from: mailFrom(),
       replyTo: process.env.REPLY_TO || process.env.OWNER_EMAIL,
       to: email,
@@ -723,10 +726,9 @@ app.post("/api/admin/auth/request-link", async (req: Request, res: Response) => 
         "Betreiber-Dashboard",
         `<p>Mit diesem einmalig verwendbaren Link meldest du dich sicher im Betreiber-Dashboard an.</p><p><a href="${escapeHtml(verificationUrl)}">Jetzt sicher anmelden</a></p><p class="muted">Der Link läuft nach 15 Minuten ab. Falls du ihn nicht angefordert hast, kannst du diese E-Mail ignorieren.</p>`,
       ),
-    });
-    res.json({ accepted: true });
+    }).catch((err: unknown) => safeLogError("Admin magic link could not be sent", err));
   } catch (error) {
-    safeLogError("Admin magic link could not be sent", error);
+    safeLogError("Admin magic link creation failed", error);
     res.status(503).json({ error: "Login-Link konnte gerade nicht gesendet werden." });
   }
 });
