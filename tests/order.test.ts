@@ -200,6 +200,18 @@ test("vehicle analysis accepts bounded text input only", async () => {
   assert.equal(normalizeVehicleAnalysisInput("A".repeat(121)).error, "Bitte beschränke die Anfrage auf 120 Zeichen.");
 });
 
+test("upstream calls fail within the configured timeout instead of hanging the request", async () => {
+  const { UpstreamTimeoutError, withTimeout } = await import("../api/index.ts");
+  const neverResolves = new Promise<void>(() => {});
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    withTimeout(neverResolves, 20, "Test provider"),
+    (error: unknown) => error instanceof UpstreamTimeoutError && error.service === "Test provider",
+  );
+  assert.ok(Date.now() - startedAt < 250, "timeout must bound the caller wait time");
+});
+
 test("signed checkout webhooks persist a new event before acknowledging it", async (t) => {
   const { default: app, setCheckoutPostProcessorForTests, setWebhookOutboxForTests } = await import("../api/index.ts");
   const reservations: { eventId: string; sessionId: string }[] = [];

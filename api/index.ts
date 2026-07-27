@@ -70,7 +70,33 @@ for (const key of REQUIRED_ENV) {
 //  das Modul nicht beim Import crasht, wenn ein Env-Var fehlt (sonst wirft
 //  Vercel Serverless "FUNCTION_INVOCATION_FAILED" und kein Endpoint antwortet).
 // ─────────────────────────────────────────────
-const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+const EXA_TIMEOUT_MS = 12_000;
+const GEMINI_TIMEOUT_MS = 25_000;
+
+export class UpstreamTimeoutError extends Error {
+  constructor(public readonly service: string, public readonly timeoutMs: number) {
+    super(`${service} did not respond within ${timeoutMs}ms`);
+    this.name = "UpstreamTimeoutError";
+  }
+}
+
+export async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, service: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new UpstreamTimeoutError(service, timeoutMs)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+const genai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY!,
+  httpOptions: { timeout: GEMINI_TIMEOUT_MS },
+});
 
 function getStripe(): Stripe {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -398,7 +424,7 @@ function setCache(key: string, data: unknown) {
 async function exaSearch(query: string, n: number): Promise<string[]> {
   const key = process.env.EXA_API_KEY;
   if (!key) throw new Error("EXA_API_KEY fehlt");
-  const exaRes = await fetch("https://api.exa.ai/search", {
+  const exaRes = await withTimeout(fetch("https://api.exa.ai/search", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": key },
     body: JSON.stringify({
@@ -407,7 +433,8 @@ async function exaSearch(query: string, n: number): Promise<string[]> {
       numResults: n,
       contents: { text: true, highlight: false },
     }),
-  });
+    signal: AbortSignal.timeout(EXA_TIMEOUT_MS),
+  }), EXA_TIMEOUT_MS, "Exa");
   if (!exaRes.ok) {
     throw new Error(`Exa HTTP ${exaRes.status}: ${await exaRes.text().catch(() => "")}`);
   }
@@ -867,16 +894,21 @@ app.post("/api/analyze-car", async (req: Request, res: Response) => {
 
   // Exa-Grounding: aktuelle Web-Auszüge holen und in die Analyse einbetten
   let exaContext = "";
+  const exaStartedAt = Date.now();
   try {
     exaContext = await getExaContext(input.value);
+    console.info(`Vehicle analysis Exa grounding completed durationMs=${Date.now() - exaStartedAt} hasContext=${Boolean(exaContext)}`);
   } catch (exaErr) {
-    console.warn("⚠️ Exa-Grounding fehlgeschlagen, fahre ohne Kontext fort:", exaErr instanceof Error ? exaErr.message : exaErr);
+    console.warn(`Vehicle analysis Exa grounding failed durationMs=${Date.now() - exaStartedAt}:`, exaErr instanceof Error ? exaErr.message : exaErr);
   }
   const groundedQuery = exaContext
     ? input.value + "\n\n=== AKTUELLE WEB-RECHERCHE (stütze alle Zahlen auf diese Quellen) ===\n" + exaContext
     : input.value;
 
   try {
+    const analysisModel = process.env.GEMINI_ANALYSIS_MODEL?.trim() || "gemini-3.1-flash-lite";
+    const geminiStartedAt = Date.now();
+    console.info(`Vehicle analysis Gemini request started model=${analysisModel}`);
     const systemInstruction = `Du bist ein erfahrener deutschsprachiger KFZ-Experte und Fahrzeug-Analyst.
 Deine Aufgabe: Analysiere das angefragte Automodell anhand aktueller, verlässlicher Informationen aus dem Internet.
 Antworte AUSSCHLIESSLICH auf Deutsch, AUSSCHLIESSLICH als valides JSON-Objekt — kein Markdown, kein Erläuterungstext davor oder danach.
@@ -897,8 +929,8 @@ Wichtig:
 - Falls du das Modell nicht eindeutig identifizieren kannst, gib im Feld "name" an, was du verstanden hast, und erkläre in "details", dass du keine gesicherten Daten gefunden hast.
 - Gib niemals rein erfundene Daten als Fakten aus. Lieber "Keine gesicherten Daten verfügbar" schreiben.`;
 
-    const response = await genai.models.generateContent({
-      model: process.env.GEMINI_ANALYSIS_MODEL?.trim() || "gemini-3.1-flash-lite",
+    const response = await withTimeout(genai.models.generateContent({
+      model: analysisModel,
       contents: [
         {
           role: "user",
@@ -909,7 +941,8 @@ Wichtig:
         systemInstruction,
         temperature: 0.2,
       },
-    });
+    }), GEMINI_TIMEOUT_MS, "Gemini");
+    console.info(`Vehicle analysis Gemini request completed model=${analysisModel} durationMs=${Date.now() - geminiStartedAt}`);
 
     const rawText = response.text ?? "";
     if (!rawText) {
@@ -950,8 +983,13 @@ Wichtig:
     res.json(carData);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
-    console.error("Gemini API error:", msg);
-    res.status(500).json({ error: "KI-Dienst vorübergehend nicht verfügbar. Bitte versuche es später erneut." });
+    const timedOut = err instanceof UpstreamTimeoutError || /\b(timeout|timed out|abort)\b/i.test(msg);
+    console.error(`Vehicle analysis Gemini request failed model=${process.env.GEMINI_ANALYSIS_MODEL?.trim() || "gemini-3.1-flash-lite"} timeout=${timedOut}:`, msg);
+    res.status(timedOut ? 504 : 500).json({
+      error: timedOut
+        ? "Die KI-Antwort dauert gerade zu lange. Bitte versuche es in wenigen Sekunden erneut."
+        : "KI-Dienst vorübergehend nicht verfügbar. Bitte versuche es später erneut.",
+    });
   }
 });
 
