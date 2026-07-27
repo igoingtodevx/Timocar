@@ -614,6 +614,7 @@ async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebho
     const mailer = getMailer();
     await mailer.sendMail({
       from: mailFrom(),
+      replyTo: process.env.REPLY_TO || process.env.OWNER_EMAIL,
       to: process.env.OWNER_EMAIL,
       subject: `Neue bezahlte AutoWunsch-Bestellung ${session.id}`,
       html: buildOwnerEmail(meta, session),
@@ -643,6 +644,7 @@ async function processCompletedCheckout(event: Stripe.Event, outbox: StripeWebho
     await persistStatus(outbox, event.id, "customer_pending");
     await mailer.sendMail({
       from: mailFrom(),
+      replyTo: process.env.REPLY_TO || process.env.OWNER_EMAIL,
       to: customerEmail,
       subject: `Auftragsbestätigung ${PRODUCT_NAME}`,
       html: buildCustomerContractEmail(meta, session, customerEmail),
@@ -755,6 +757,7 @@ app.post("/api/admin/auth/request-link", async (req: Request, res: Response) => 
     const verificationUrl = `${appUrl()}/api/admin/auth/verify?token=${encodeURIComponent(token)}`;
     await getMailer().sendMail({
       from: mailFrom(),
+      replyTo: process.env.REPLY_TO || process.env.OWNER_EMAIL,
       to: email,
       subject: "Dein sicherer Login-Link für AutoWunsch",
       html: emailShell(
@@ -1176,6 +1179,7 @@ app.post("/api/withdrawal", async (req: Request, res: Response) => {
 
     const ownerResult = await mailer.sendMail({
       from: mailFrom(),
+      replyTo: process.env.REPLY_TO || process.env.OWNER_EMAIL,
       to: ownerEmail,
       subject: `Widerruf eingegangen ${receiptReference}`,
       html: buildWithdrawalOwnerEmail(withdrawal, contractReference, receiptReference, timestamp),
@@ -1190,6 +1194,7 @@ app.post("/api/withdrawal", async (req: Request, res: Response) => {
 
     const consumerResult = await mailer.sendMail({
       from: mailFrom(),
+      replyTo: process.env.REPLY_TO || process.env.OWNER_EMAIL,
       to: verifiedEmail,
       subject: `Eingangsbestaetigung Widerruf ${receiptReference}`,
       html: buildWithdrawalConsumerEmail(withdrawal, contractReference, receiptReference, timestamp),
