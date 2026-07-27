@@ -42,6 +42,9 @@ function db(): Queryable {
   pool ??= new Pool({
     connectionString: sanitizeDatabaseConnectionString(connectionString),
     ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    max: 3,
   });
   return pool;
 }
