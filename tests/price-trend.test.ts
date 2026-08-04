@@ -697,22 +697,28 @@ test("45c. Jahre-Endpoint: externer Fehler → 502, Timeout → 504", async () =
   }
 });
 
-test("45d. ungültige Env-Werte fallen auf Defaults zurück", async () => {
-  process.env.PRICE_TREND_RATE_LIMIT = "abc";
-  process.env.PRICE_TREND_RATE_WINDOW_MS = "-5";
-  process.env.PRICE_TREND_TIMEOUT_MS = "NaN";
-  process.env.PRICE_TREND_FORECAST_CAP = "xyz";
-  try {
-    mockResponse = () => jsonResponse(cohortRaw(2019, 14000, 1.005, 30));
+test("45d. PRICE_TREND_FORECAST_CAP akzeptiert nur 0 < cap < 1", async () => {
+  mockResponse = () => jsonResponse(cohortRaw(2019, 14000, 1.03, 30));
+  const expected = forecastCohort(
+    normalizeCohortResponse(cohortRaw(2019, 14000, 1.03, 30), MODEL_ID, MODEL_NAME, 2019),
+    { annualCap: 0.2 },
+  );
+
+  for (const invalidCap of ["0", "-0.1", "1", "1.5", "NaN", "abc"]) {
+    process.env.PRICE_TREND_FORECAST_CAP = invalidCap;
     const { status, body } = await get(`/api/price-trend?modelId=${MODEL_ID}&modelYear=2019`);
-    assert.equal(status, 200);
-    assert.equal(body.reason, "ok");
-  } finally {
-    delete process.env.PRICE_TREND_RATE_LIMIT;
-    delete process.env.PRICE_TREND_RATE_WINDOW_MS;
-    delete process.env.PRICE_TREND_TIMEOUT_MS;
-    delete process.env.PRICE_TREND_FORECAST_CAP;
+    assert.equal(status, 200, `cap=${invalidCap}`);
+    assert.deepEqual(body.forecast, expected.forecast, `cap=${invalidCap} muss auf Default 0.20 zurückfallen`);
+    // Cache je Cap-Iteration umgehen.
+    const { resetPriceTrendStateForTests } = await import("../api/index.ts");
+    resetPriceTrendStateForTests();
   }
+
+  process.env.PRICE_TREND_FORECAST_CAP = "0.1";
+  const custom = await get(`/api/price-trend?modelId=${MODEL_ID}&modelYear=2019`);
+  assert.equal(custom.status, 200);
+  assert.notDeepEqual(custom.body.forecast, expected.forecast, "cap=0.10 muss akzeptiert werden");
+  delete process.env.PRICE_TREND_FORECAST_CAP;
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
