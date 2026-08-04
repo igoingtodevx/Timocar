@@ -32,6 +32,13 @@ import {
   normalizeAdminOrderUpdate,
   normalizeStorefrontSettings,
 } from "../shared/admin.ts";
+import { findModel } from "../shared/pkw-models.ts";
+import {
+  normalizeCohortResponse,
+  forecastCohort,
+  type ForecastPoint,
+  type HistoryPoint,
+} from "../shared/price-trend.ts";
 import {
   createMagicLink,
   databaseConfigured,
@@ -1218,6 +1225,317 @@ app.post("/api/withdrawal", async (req: Request, res: Response) => {
   } catch (err) {
     safeLogError("Withdrawal processing failed", err);
     res.status(400).json({ error: WITHDRAWAL_ERROR });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  Price Trend — Fahrzeug-Preisentwicklung (V1)
+//  Additiv: berührt keine bestehenden Pfade.
+//  Externe Quelle: preistrends-api.pkw.de (kein API-Key).
+// ─────────────────────────────────────────────
+const PRICE_TREND_API_BASE = "https://preistrends-api.pkw.de";
+const PRICE_TREND_DISCLAIMER =
+  "Rechnerische Fortschreibung auf Basis historischer Durchschnittspreise. Keine Garantie und keine Kaufempfehlung. Langfristige Werte, insbesondere ab dem dritten Prognosejahr, sind deutlich unsicherer.";
+const PRICE_TREND_CACHE_MAX_ENTRIES = 5000;
+
+function safeEnvInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+}
+
+function safeEnvFloat(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed >= 1) return fallback;
+  return parsed;
+}
+
+function priceTrendEnabled(): boolean {
+  const raw = process.env.PRICE_TREND_ENABLED;
+  return raw === undefined ? true : raw.trim().toLowerCase() !== "false" && raw.trim() !== "0";
+}
+
+const priceTrendCache = new Map<string, { data: unknown; expiresAt: number }>();
+
+function priceTrendCacheGet(key: string): unknown | null {
+  const entry = priceTrendCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    priceTrendCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function priceTrendCacheSet(key: string, data: unknown) {
+  if (priceTrendCache.size >= PRICE_TREND_CACHE_MAX_ENTRIES) {
+    priceTrendCache.clear();
+  }
+  priceTrendCache.set(key, { data, expiresAt: Date.now() + safeEnvInt("PRICE_TREND_CACHE_TTL_MS", 86_400_000) });
+}
+
+const priceTrendRateMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkPriceTrendRateLimit(namespace: string, ip: string): boolean {
+  const key = `price-trend:${namespace}:${ip}`;
+  const limit = safeEnvInt("PRICE_TREND_RATE_LIMIT", 10);
+  const windowMs = safeEnvInt("PRICE_TREND_RATE_WINDOW_MS", 60_000);
+  const now = Date.now();
+  const entry = priceTrendRateMap.get(key);
+  if (!entry || now > entry.resetAt) {
+    priceTrendRateMap.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= limit) return false;
+  entry.count += 1;
+  return true;
+}
+
+class PriceTrendUpstreamError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "PriceTrendUpstreamError";
+  }
+}
+
+type PriceTrendFetch = (url: string, init?: RequestInit) => Promise<FetchResponse>;
+type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+let priceTrendFetchOverride: PriceTrendFetch | undefined;
+
+/** Test-Hook: externe Fetch-Funktion ersetzen (analog setWebhookOutboxForTests). */
+export function setPriceTrendFetchForTests(fetchFn?: PriceTrendFetch): void {
+  priceTrendFetchOverride = fetchFn;
+}
+
+/** Test-Hook: In-Memory-Zustand (Cache + Rate-Limit) zurücksetzen. */
+export function resetPriceTrendStateForTests(): void {
+  priceTrendCache.clear();
+  priceTrendRateMap.clear();
+}
+
+function priceTrendFetch(url: string, init?: RequestInit): Promise<FetchResponse> {
+  return priceTrendFetchOverride ? priceTrendFetchOverride(url, init) : fetch(url, init);
+}
+
+async function priceTrendFetchJson(url: URL): Promise<unknown> {
+  const timeoutMs = safeEnvInt("PRICE_TREND_TIMEOUT_MS", 8000);
+  let response: FetchResponse;
+  try {
+    response = await withTimeout(
+      priceTrendFetch(url.toString(), {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+      timeoutMs,
+      "preistrends-api.pkw.de",
+    );
+  } catch (error) {
+    if (error instanceof UpstreamTimeoutError) throw error;
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new UpstreamTimeoutError("preistrends-api.pkw.de", timeoutMs);
+    }
+    throw new PriceTrendUpstreamError(0, error instanceof Error ? error.message : String(error));
+  }
+  if (response.status === 404) throw new PriceTrendUpstreamError(404, "not_found");
+  if (!response.ok) throw new PriceTrendUpstreamError(response.status, `http_${response.status}`);
+  const json: unknown = await response.json().catch(() => {
+    throw new PriceTrendUpstreamError(0, "invalid_json");
+  });
+  return json;
+}
+
+function parseModelIdParam(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!/^\d{1,7}$/.test(trimmed)) return null;
+  const id = Number(trimmed);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function parseModelYearParam(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!/^\d{4}$/.test(trimmed)) return null;
+  const year = Number(trimmed);
+  if (year < 1900 || year > 2100) return null;
+  return year;
+}
+
+function isoDate(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function uniqueSortedYears(raw: unknown): number[] {
+  if (typeof raw !== "object" || raw === null) return [];
+  const modelYears = (raw as { model_years?: unknown }).model_years;
+  if (!Array.isArray(modelYears)) return [];
+  const years = new Set<number>();
+  for (const entry of modelYears) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const year = (entry as { year?: unknown }).year;
+    if (typeof year === "number" && Number.isInteger(year) && year >= 1900 && year <= 2100) {
+      years.add(year);
+    }
+  }
+  return [...years].sort((a, b) => a - b);
+}
+
+function priceTrendUpstreamMessage(error: unknown): string {
+  if (error instanceof PriceTrendUpstreamError) {
+    if (error.status === 404) return "Für dieses Modell sind keine Preisdaten verfügbar.";
+    return "Der Preisdaten-Anbieter meldet gerade einen Fehler. Bitte später erneut versuchen.";
+  }
+  return "Die Preisdaten sind gerade nicht erreichbar. Bitte später erneut versuchen.";
+}
+
+type PriceTrendModelInfo = { id: number; name: string; make: string };
+type PriceTrendYearsPayload = { model: PriceTrendModelInfo; years: number[]; source: "live" | "cache" };
+type PriceTrendPayload = {
+  model: PriceTrendModelInfo;
+  modelYear: number;
+  history: HistoryPoint[];
+  forecast: ForecastPoint[];
+  reason: "ok" | "insufficient_data";
+  source: "live" | "cache";
+  disclaimer: string;
+};
+
+// GET /api/price-trend/models/:modelId/years
+// Verfügbare Modelljahr-Kohorten eines Modells (extern ohne years[]-Filter, Cache 24 h).
+app.get("/api/price-trend/models/:modelId/years", async (req: Request, res: Response) => {
+  if (!priceTrendEnabled()) {
+    res.status(503).json({ error: "Die Preisentwicklung ist derzeit nicht verfügbar." });
+    return;
+  }
+  const modelId = parseModelIdParam(req.params.modelId);
+  if (modelId === null) {
+    res.status(400).json({ error: "Ungültige Modell-ID." });
+    return;
+  }
+  const model = findModel(modelId);
+  if (!model) {
+    res.status(400).json({ error: "Modell nicht gefunden." });
+    return;
+  }
+  if (!checkPriceTrendRateLimit("years", getClientIp(req))) {
+    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
+    return;
+  }
+
+  const cacheKey = `price-trend-years:${modelId}`;
+  const cached = priceTrendCacheGet(cacheKey);
+  if (cached) {
+    res.json({ ...(cached as PriceTrendYearsPayload), source: "cache" });
+    return;
+  }
+
+  try {
+    const url = new URL(`${PRICE_TREND_API_BASE}/models/${modelId}`);
+    const raw = await priceTrendFetchJson(url);
+    const years = uniqueSortedYears(raw);
+    if (years.length === 0) {
+      throw new PriceTrendUpstreamError(0, "empty_years");
+    }
+    const payload: PriceTrendYearsPayload = {
+      model: { id: model.id, name: model.name, make: model.make },
+      years,
+      source: "live",
+    };
+    priceTrendCacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof UpstreamTimeoutError) {
+      res.status(504).json({ error: "Die Preisdaten haben nicht rechtzeitig geantwortet. Bitte später erneut versuchen." });
+      return;
+    }
+    if (error instanceof PriceTrendUpstreamError && error.status === 404) {
+      res.status(404).json({ error: "Für dieses Modell sind keine Preisdaten verfügbar." });
+      return;
+    }
+    res.status(502).json({ error: priceTrendUpstreamMessage(error) });
+  }
+});
+
+// GET /api/price-trend?modelId=948&modelYear=2019
+// Eine Modelljahr-Kohorte (letzte 36 Monate) laden, normalisieren und prognostizieren.
+app.get("/api/price-trend", async (req: Request, res: Response) => {
+  if (!priceTrendEnabled()) {
+    res.status(503).json({ error: "Die Preisentwicklung ist derzeit nicht verfügbar." });
+    return;
+  }
+  const modelId = parseModelIdParam(typeof req.query.modelId === "string" ? req.query.modelId : undefined);
+  if (modelId === null) {
+    res.status(400).json({ error: "Ungültige Modell-ID." });
+    return;
+  }
+  const model = findModel(modelId);
+  if (!model) {
+    res.status(400).json({ error: "Modell nicht gefunden." });
+    return;
+  }
+  const modelYear = parseModelYearParam(typeof req.query.modelYear === "string" ? req.query.modelYear : undefined);
+  if (modelYear === null) {
+    res.status(400).json({ error: "Ungültiges Modelljahr." });
+    return;
+  }
+  if (!checkPriceTrendRateLimit("trend", getClientIp(req))) {
+    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
+    return;
+  }
+
+  const cacheKey = `price-trend:${modelId}:${modelYear}`;
+  const cached = priceTrendCacheGet(cacheKey);
+  if (cached) {
+    res.json({ ...(cached as PriceTrendPayload), source: "cache" });
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const from = new Date(now);
+    from.setUTCMonth(from.getUTCMonth() - 36);
+    const url = new URL(`${PRICE_TREND_API_BASE}/models/${modelId}`);
+    url.searchParams.append("years[]", String(modelYear));
+    url.searchParams.append("from", isoDate(from));
+    url.searchParams.append("to", isoDate(now));
+
+    const raw = await priceTrendFetchJson(url);
+    const points = normalizeCohortResponse(raw, modelId, model.name, modelYear);
+    if (points.length === 0) {
+      // Externe Response enthält die angefragte Kohorte nicht (oder keine gültigen Punkte).
+      res.status(400).json({ error: `Für das Modelljahr ${modelYear} sind keine Preisdaten verfügbar.` });
+      return;
+    }
+
+    const { forecast, reason } = forecastCohort(points, { annualCap: safeEnvFloat("PRICE_TREND_FORECAST_CAP", 0.20) });
+    const payload: PriceTrendPayload = {
+      model: { id: model.id, name: model.name, make: model.make },
+      modelYear,
+      history: points.map((p) => ({ timestamp: p.timestamp, price: p.price })),
+      forecast,
+      reason,
+      source: "live",
+      disclaimer: PRICE_TREND_DISCLAIMER,
+    };
+    priceTrendCacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof UpstreamTimeoutError) {
+      res.status(504).json({ error: "Die Preisdaten haben nicht rechtzeitig geantwortet. Bitte später erneut versuchen." });
+      return;
+    }
+    if (error instanceof PriceTrendUpstreamError && error.status === 404) {
+      res.status(404).json({ error: "Für dieses Modell sind keine Preisdaten verfügbar." });
+      return;
+    }
+    res.status(502).json({ error: priceTrendUpstreamMessage(error) });
   }
 });
 

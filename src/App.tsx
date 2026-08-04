@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Sparkles,
 
+  TrendingUp,
   Undo2,
   X,
 } from "lucide-react";
@@ -40,6 +41,8 @@ import {
   hasOrderFormErrors,
   validateOrderForm,
 } from "../shared/order";
+import { listMakes, modelsByMake, type PkwModel } from "../shared/pkw-models";
+import PriceTrendChart from "./PriceTrendChart";
 
 interface CarDetail {
   name: string;
@@ -61,6 +64,33 @@ type CheckoutDetails = {
   paymentStatus: string;
   product: string;
 };
+
+type PriceTrendResponse = {
+  model: { id: number; name: string; make: string };
+  modelYear: number;
+  history: Array<{ timestamp: number; price: number }>;
+  forecast: Array<{ timestamp: number; price: number }>;
+  reason: "ok" | "insufficient_data";
+  source: "live" | "cache";
+  disclaimer: string;
+};
+
+type PriceTrendYearsResponse = {
+  model: { id: number; name: string; make: string };
+  years: number[];
+  source: "live" | "cache";
+};
+
+type PriceTrendStatus =
+  | "idle"
+  | "loading-years"
+  | "loading-trend"
+  | "success"
+  | "insufficient-data"
+  | "error"
+  | "empty";
+
+const priceTrendMakes = listMakes();
 
 const emptyOrderForm: OrderFormData = {
   budget: "",
@@ -153,6 +183,16 @@ export default function App() {
   const [analyzedCar, setAnalyzedCar] = useState<CarDetail | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
+
+  // Preisentwicklung (V1): Marke → Modell → Modelljahr
+  const [ptMake, setPtMake] = useState("");
+  const [ptModels, setPtModels] = useState<PkwModel[]>([]);
+  const [ptModelId, setPtModelId] = useState<number | null>(null);
+  const [ptYears, setPtYears] = useState<number[]>([]);
+  const [ptModelYear, setPtModelYear] = useState<number | null>(null);
+  const [ptStatus, setPtStatus] = useState<PriceTrendStatus>("idle");
+  const [ptData, setPtData] = useState<PriceTrendResponse | null>(null);
+  const [ptError, setPtError] = useState<string | null>(null);
 
   const [orderForm, setOrderForm] = useState<OrderFormData>(emptyOrderForm);
   const [formErrors, setFormErrors] = useState<OrderFormErrors>({});
@@ -297,6 +337,81 @@ export default function App() {
       setAnalyzeError("Verbindung fehlgeschlagen.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // ── Preisentwicklung: Marke → Modell → Modelljahr ──────────────────────
+  const resetPriceTrendResult = () => {
+    setPtStatus("idle");
+    setPtData(null);
+    setPtError(null);
+    setPtModelYear(null);
+    setPtYears([]);
+  };
+
+  const handlePtMakeChange = (make: string) => {
+    setPtMake(make);
+    setPtModelId(null);
+    setPtModels(make ? modelsByMake(make) : []);
+    resetPriceTrendResult();
+  };
+
+  const handlePtModelChange = async (modelId: number | null) => {
+    setPtModelId(modelId);
+    resetPriceTrendResult();
+    if (modelId === null) return;
+    setPtStatus("loading-years");
+    try {
+      const res = await fetch(`/api/price-trend/models/${modelId}/years`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Modelljahre konnten nicht geladen werden.");
+      const years = (data as PriceTrendYearsResponse).years ?? [];
+      if (years.length === 0) {
+        setPtStatus("empty");
+        setPtError("Für dieses Modell sind keine Modelljahre verfügbar.");
+        return;
+      }
+      setPtYears(years);
+      setPtStatus("idle");
+    } catch (error) {
+      setPtError(error instanceof Error ? error.message : "Modelljahre konnten nicht geladen werden.");
+      setPtStatus("error");
+    }
+  };
+
+  const loadPriceTrend = async (modelId: number, modelYear: number) => {
+    setPtStatus("loading-trend");
+    setPtData(null);
+    setPtError(null);
+    try {
+      const res = await fetch(`/api/price-trend?modelId=${modelId}&modelYear=${modelYear}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Preisdaten konnten nicht geladen werden.");
+      const payload = data as PriceTrendResponse;
+      setPtData(payload);
+      setPtStatus(payload.reason === "ok" ? "success" : "insufficient-data");
+    } catch (error) {
+      setPtError(error instanceof Error ? error.message : "Preisdaten konnten nicht geladen werden.");
+      setPtStatus("error");
+    }
+  };
+
+  const handlePtYearChange = (modelYear: number | null) => {
+    setPtModelYear(modelYear);
+    setPtData(null);
+    setPtError(null);
+    if (modelYear === null || ptModelId === null) {
+      setPtStatus("idle");
+      return;
+    }
+    void loadPriceTrend(ptModelId, modelYear);
+  };
+
+  const retryPriceTrend = () => {
+    if (ptModelId !== null && ptModelYear !== null) {
+      void loadPriceTrend(ptModelId, ptModelYear);
+    } else if (ptModelId !== null) {
+      void handlePtModelChange(ptModelId);
     }
   };
 
@@ -893,6 +1008,115 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-10 max-w-3xl rounded-xl border border-[#222222] bg-[#111111] p-6 md:p-8">
+                <div className="mb-5 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-brand-orange" />
+                  <h3 className="font-display text-xl font-black text-white">Preisentwicklung (rechnerisch)</h3>
+                </div>
+                <p className="mb-5 text-sm text-white/70">Wähle Marke, Modell und Modelljahr, um den historischen Preisverlauf und eine rechnerische Prognose für die nächsten 60 Monate zu sehen.</p>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label htmlFor="pt-make" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Marke</label>
+                    <select
+                      id="pt-make"
+                      value={ptMake}
+                      onChange={(event) => handlePtMakeChange(event.target.value)}
+                      className="w-full cursor-pointer rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                    >
+                      <option value="">Marke wählen…</option>
+                      {priceTrendMakes.map((make) => (
+                        <option key={make} value={make}>{make}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="pt-model" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Modell</label>
+                    <select
+                      id="pt-model"
+                      value={ptModelId ?? ""}
+                      onChange={(event) => { void handlePtModelChange(event.target.value ? Number(event.target.value) : null); }}
+                      disabled={!ptMake}
+                      className="w-full cursor-pointer rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">Modell wählen…</option>
+                      {ptModels.map((model) => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="pt-year" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Modelljahr</label>
+                    <select
+                      id="pt-year"
+                      value={ptModelYear ?? ""}
+                      onChange={(event) => handlePtYearChange(event.target.value ? Number(event.target.value) : null)}
+                      disabled={ptModelId === null || ptYears.length === 0 || ptStatus === "loading-years"}
+                      className="w-full cursor-pointer rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">Modelljahr wählen…</option>
+                      {ptYears.map((year) => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {ptStatus === "loading-years" && (
+                  <div className="mt-6 flex items-center gap-2 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-4 text-sm text-white/70">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-orange" /> Verfügbare Modelljahre werden geladen…
+                  </div>
+                )}
+
+                {ptStatus === "loading-trend" && (
+                  <div className="mt-6 flex items-center gap-2 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-4 text-sm text-white/70">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-orange" /> Preisdaten werden geladen…
+                  </div>
+                )}
+
+                {ptStatus === "error" && (
+                  <div className="mt-6 flex items-start gap-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-red-200">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold">Preisdaten konnten nicht geladen werden</p>
+                      <p className="mt-1 text-xs">{ptError}</p>
+                      <button type="button" onClick={retryPriceTrend} className="mt-2 cursor-pointer rounded-md border border-red-900/50 px-3 py-1.5 text-xs font-bold text-red-200 transition-colors hover:border-red-700">
+                        Erneut versuchen
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {ptStatus === "empty" && (
+                  <div className="mt-6 flex items-start gap-3 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-4 text-white/70">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
+                    <p className="text-xs">{ptError}</p>
+                  </div>
+                )}
+
+                {(ptStatus === "success" || ptStatus === "insufficient-data") && ptData && (
+                  <div className="mt-6 border-t border-[#1A1A1A] pt-5">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-bold text-white">
+                        {ptData.model.make} {ptData.model.name} · Modelljahr {ptData.modelYear}
+                      </p>
+                      {ptData.source === "cache" && (
+                        <span className="rounded-full border border-[#2A2A2A] bg-[#0D0D0D] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/50">Zwischengespeichert</span>
+                      )}
+                    </div>
+                    {ptData.history.length > 0 && (
+                      <PriceTrendChart history={ptData.history} forecast={ptData.forecast} modelName={ptData.model.name} modelYear={ptData.modelYear} />
+                    )}
+                    {ptStatus === "insufficient-data" && (
+                      <p className="mt-3 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-3 text-xs text-white/70">
+                        Für eine rechnerische Prognose liegen noch zu wenige Daten vor — die historische Entwicklung wird trotzdem angezeigt.
+                      </p>
+                    )}
+                    <p className="mt-4 text-[11px] leading-relaxed text-white/50">{ptData.disclaimer}</p>
                   </div>
                 )}
               </div>
