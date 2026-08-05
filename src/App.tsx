@@ -91,6 +91,29 @@ type PriceTrendStatus =
   | "empty";
 
 const priceTrendMakes = listMakes();
+const priceTrendEuro = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const priceTrendPercent = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function priceTrendSummary(currentPrice: number, forecast: Array<{ timestamp: number; price: number }>) {
+  return [
+    { label: "In 1 Jahr", months: 12 },
+    { label: "In 3 Jahren", months: 36 },
+    { label: "In 5 Jahren", months: 60 },
+  ].map(({ label, months }) => {
+    const point = forecast[months - 1];
+    if (!point) return { label, price: null, absoluteChange: null, percentageChange: null };
+    const absoluteChange = point.price - currentPrice;
+    return { label, price: point.price, absoluteChange, percentageChange: ((point.price / currentPrice) - 1) * 100 };
+  });
+}
+
+function signedEuro(value: number): string {
+  return `${value >= 0 ? "+" : "−"}${priceTrendEuro.format(Math.abs(value))}`;
+}
+
+function signedPercent(value: number): string {
+  return `${value >= 0 ? "+" : "−"}${priceTrendPercent.format(Math.abs(value))} %`;
+}
 
 const emptyOrderForm: OrderFormData = {
   budget: "",
@@ -1108,13 +1131,32 @@ export default function App() {
                         <span className="rounded-full border border-[#2A2A2A] bg-[#0D0D0D] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/50">Zwischengespeichert</span>
                       )}
                     </div>
-                    {ptData.history.length > 0 && (
-                      <PriceTrendChart history={ptData.history} forecast={ptData.forecast} modelName={ptData.model.name} modelYear={ptData.modelYear} />
+                    {ptStatus === "success" && ptData.history.length > 0 && (
+                      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Preisprognose-Zusammenfassung">
+                        <div className="rounded-lg border border-[#222222] bg-[#0D0D0D] p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">Aktuell</p>
+                          <p className="mt-1 text-lg font-black text-white">{priceTrendEuro.format(ptData.history[ptData.history.length - 1]!.price)}</p>
+                        </div>
+                        {priceTrendSummary(ptData.history[ptData.history.length - 1]!.price, ptData.forecast).map((item) => (
+                          <div key={item.label} className="rounded-lg border border-[#222222] bg-[#0D0D0D] p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">{item.label}</p>
+                            {item.price !== null && item.absoluteChange !== null && item.percentageChange !== null ? (
+                              <>
+                                <p className="mt-1 text-lg font-black text-white">{priceTrendEuro.format(item.price)}</p>
+                                <p className="mt-1 text-[11px] text-white/60">{signedEuro(item.absoluteChange)} · {signedPercent(item.percentageChange)}</p>
+                              </>
+                            ) : <p className="mt-1 text-xs text-white/50">Nicht verfügbar</p>}
+                          </div>
+                        ))}
+                      </div>
                     )}
                     {ptStatus === "insufficient-data" && (
-                      <p className="mt-3 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-3 text-xs text-white/70">
-                        Für eine rechnerische Prognose liegen noch zu wenige Daten vor — die historische Entwicklung wird trotzdem angezeigt.
+                      <p className="mb-5 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-3 text-sm leading-relaxed text-white/75">
+                        Für dieses Modelljahr liegen noch nicht genügend historische Daten für eine belastbare Prognose vor. Der bisherige Preisverlauf wird trotzdem angezeigt.
                       </p>
+                    )}
+                    {ptData.history.length > 0 && (
+                      <PriceTrendChart history={ptData.history} forecast={ptData.forecast} modelName={ptData.model.name} modelYear={ptData.modelYear} />
                     )}
                     <p className="mt-4 text-[11px] leading-relaxed text-white/50">{ptData.disclaimer}</p>
                   </div>

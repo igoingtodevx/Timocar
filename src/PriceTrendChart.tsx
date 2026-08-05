@@ -39,6 +39,8 @@ function formatMonthLabel(timestamp: number): string {
 export default function PriceTrendChart({ history, forecast, modelName, modelYear }: PriceTrendChartProps) {
   const all = [...history, ...forecast];
   if (all.length === 0) return null;
+  const hasForecast = forecast.length > 0;
+  const forecastPath = hasForecast && history.length > 0 ? [history[history.length - 1]!, ...forecast] : forecast;
 
   const minTs = all[0]!.timestamp;
   const maxTs = all[all.length - 1]!.timestamp;
@@ -88,7 +90,7 @@ export default function PriceTrendChart({ history, forecast, modelName, modelYea
       viewBox={`0 0 ${WIDTH} ${HEIGHT + PAD_BOTTOM + 8}`}
       role="img"
       aria-label={ariaLabel}
-      className="h-auto w-full max-w-full"
+      className="h-[280px] w-full max-w-full md:h-[300px]"
       style={{ display: "block" }}
     >
       {/* Gitter + Preis-Labels */}
@@ -123,13 +125,13 @@ export default function PriceTrendChart({ history, forecast, modelName, modelYea
       {history.length === 1 && <circle cx={x(history[0]!.timestamp)} cy={y(history[0]!.price)} r="3.5" fill="#F3F4F6" />}
 
       {/* Prognose: gestrichelte Linie */}
-      {forecast.length >= 2 && (
-        <path d={toPath(forecast)} fill="none" stroke="#FF8A00" strokeWidth="2.5" strokeDasharray="7 5" strokeLinejoin="round" strokeLinecap="round" />
+      {hasForecast && forecastPath.length >= 2 && (
+        <path d={toPath(forecastPath)} fill="none" stroke="#FF8A00" strokeWidth="2.5" strokeDasharray="7 5" strokeLinejoin="round" strokeLinecap="round" />
       )}
-      {forecast.length === 1 && <circle cx={x(forecast[0]!.timestamp)} cy={y(forecast[0]!.price)} r="3.5" fill="#FF8A00" />}
+      {hasForecast && forecastPath.length === 1 && <circle cx={x(forecastPath[0]!.timestamp)} cy={y(forecastPath[0]!.price)} r="3.5" fill="#FF8A00" />}
 
       {/* Übergangsmarker am letzten historischen Punkt */}
-      {history.length > 0 && <circle cx={x(history[history.length - 1]!.timestamp)} cy={y(history[history.length - 1]!.price)} r="4" fill="#FF8A00" stroke="#0D0D0D" strokeWidth="1.5" />}
+      {hasForecast && history.length > 0 && <circle cx={x(history[history.length - 1]!.timestamp)} cy={y(history[history.length - 1]!.price)} r="4" fill="#FF8A00" stroke="#0D0D0D" strokeWidth="1.5" />}
       {history.length > 0 && (
         <text x={x(history[history.length - 1]!.timestamp)} y={y(history[history.length - 1]!.price) - 10} textAnchor="middle" fontSize="10" fill="#D1D5DB">
           {euro.format(history[history.length - 1]!.price)}
@@ -142,10 +144,14 @@ export default function PriceTrendChart({ history, forecast, modelName, modelYea
         <text x={PAD_LEFT + 28} y={HEIGHT + 6} fontSize="11" fill="#D1D5DB">
           Historie
         </text>
-        <line x1={PAD_LEFT + 90} x2={PAD_LEFT + 112} y1={HEIGHT + 2} y2={HEIGHT + 2} stroke="#FF8A00" strokeWidth="2.5" strokeDasharray="7 5" />
-        <text x={PAD_LEFT + 118} y={HEIGHT + 6} fontSize="11" fill="#D1D5DB">
-          Rechnerische Prognose
-        </text>
+        {hasForecast && (
+          <>
+            <line x1={PAD_LEFT + 90} x2={PAD_LEFT + 112} y1={HEIGHT + 2} y2={HEIGHT + 2} stroke="#FF8A00" strokeWidth="2.5" strokeDasharray="7 5" />
+            <text x={PAD_LEFT + 118} y={HEIGHT + 6} fontSize="11" fill="#D1D5DB">
+              Rechnerische Prognose
+            </text>
+          </>
+        )}
       </g>
 
       {/* Beschriftung des letzten Monats (ohne Hover verständlich) */}
