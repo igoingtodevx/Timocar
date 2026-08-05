@@ -80,7 +80,7 @@ export default function PriceTrendChart({ history, forecast, modelName, modelYea
   const historyEnd = history.length > 0 ? formatDateLabel(history[history.length - 1]!.timestamp) : "";
   const forecastEnd = forecast.length > 0 ? formatDateLabel(forecast[forecast.length - 1]!.timestamp) : "";
   const ariaLabel = [
-    `Preisentwicklung ${modelName}, Modelljahr ${modelYear}.`,
+    `Preisentwicklung ${modelName}, Jahrgang ${modelYear}.`,
     history.length > 0 ? `${history.length} historische Monatswerte von ${historyStart} bis ${historyEnd}.` : "Keine historischen Werte.",
     forecast.length > 0 ? `Rechnerische Prognose bis ${forecastEnd}.` : "Keine Prognose verfügbar.",
   ].join(" ");

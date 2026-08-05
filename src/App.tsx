@@ -42,6 +42,8 @@ import {
   validateOrderForm,
 } from "../shared/order";
 import { listMakes, seriesByMake, searchVariants } from "../shared/pkw-models";
+import type { VariantOption } from "./VariantCombobox";
+import VariantCombobox from "./VariantCombobox";
 import PriceTrendChart from "./PriceTrendChart";
 
 interface CarDetail {
@@ -218,6 +220,11 @@ export default function App() {
   const [ptData, setPtData] = useState<PriceTrendResponse | null>(null);
   const [ptError, setPtError] = useState<string | null>(null);
 
+  const ptVariantOptions = useMemo(() => {
+    if (!ptMake || !ptSeries) return [];
+    return searchVariants(ptVariantQuery, ptMake, ptSeries);
+  }, [ptVariantQuery, ptMake, ptSeries]);
+
   const [orderForm, setOrderForm] = useState<OrderFormData>(emptyOrderForm);
   const [formErrors, setFormErrors] = useState<OrderFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -371,27 +378,26 @@ export default function App() {
     setPtError(null);
     setPtModelYear(null);
     setPtYears([]);
+    setPtVariantQuery("");
+    setPtModelId(null);
   };
 
   const handlePtMakeChange = (make: string) => {
     setPtMake(make);
     setPtSeries("");
-    setPtVariantQuery("");
-    setPtModelId(null);
     resetPriceTrendResult();
   };
 
   const handlePtSeriesChange = (series: string) => {
     setPtSeries(series);
-    setPtVariantQuery("");
-    setPtModelId(null);
     resetPriceTrendResult();
   };
 
-  const handlePtVariantChange = async (modelId: number | null) => {
+  const handlePtVariantSelect = async (option: VariantOption) => {
+    const modelId = option.modelId;
+    setPtVariantQuery(option.displayName);
     setPtModelId(modelId);
     resetPriceTrendResult();
-    if (modelId === null) return;
     setPtStatus("loading-years");
     try {
       const res = await fetch(`/api/price-trend/models/${modelId}/years`);
@@ -443,7 +449,7 @@ export default function App() {
     if (ptModelId !== null && ptModelYear !== null) {
       void loadPriceTrend(ptModelId, ptModelYear);
     } else if (ptModelId !== null) {
-      void handlePtVariantChange(ptModelId);
+      void handlePtVariantSelect({ modelId: ptModelId, displayName: ptVariantQuery || `Variante ${ptModelId}` });
     }
   };
 
@@ -1067,12 +1073,16 @@ export default function App() {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="pt-variant-search" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Variante / Motorisierung</label>
-                    <input id="pt-variant-search" value={ptVariantQuery} onChange={(event) => setPtVariantQuery(event.target.value)} disabled={!ptSeries} placeholder="z. B. E 400" className="mb-1 w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2 text-xs text-white disabled:opacity-50" />
-                    <select id="pt-variant" value={ptModelId ?? ""} onChange={(event) => { void handlePtVariantChange(event.target.value ? Number(event.target.value) : null); }} disabled={!ptSeries} className="w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50">
-                      <option value="">Variante wählen…</option>
-                      {searchVariants(ptVariantQuery, ptMake, ptSeries).map((variant) => <option key={variant.modelId} value={variant.modelId}>{variant.displayName}</option>)}
-                    </select>
+                    <VariantCombobox
+                      disabled={!ptSeries}
+                      make={ptMake}
+                      series={ptSeries}
+                      selectedModelId={ptModelId}
+                      query={ptVariantQuery}
+                      results={ptVariantOptions}
+                      onChangeQuery={setPtVariantQuery}
+                      onSelect={handlePtVariantSelect}
+                    />
                   </div>
                   <div>
                     <label htmlFor="pt-year" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Jahrgang</label>
@@ -1119,16 +1129,13 @@ export default function App() {
                   <div className="mt-6 border-t border-[#1A1A1A] pt-5">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-bold text-white">
-                        {ptData.model.make} {ptData.model.name} · Modelljahr {ptData.modelYear}
+                        {ptData.model.make} {ptData.model.name} · Jahrgang {ptData.modelYear}
                       </p>
-                      {ptData.source === "cache" && (
-                        <span className="rounded-full border border-[#2A2A2A] bg-[#0D0D0D] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/50">Zwischengespeichert</span>
-                      )}
                     </div>
                     {ptStatus === "success" && ptData.history.length > 0 && (
                       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Preisprognose-Zusammenfassung">
                         <div className="rounded-lg border border-[#222222] bg-[#0D0D0D] p-3">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">Aktuell</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">Aktueller Ø-Preis</p>
                           <p className="mt-1 text-lg font-black text-white">{priceTrendEuro.format(ptData.history[ptData.history.length - 1]!.price)}</p>
                         </div>
                         {priceTrendSummary(ptData.history[ptData.history.length - 1]!.price, ptData.forecast).map((item) => (
@@ -1146,7 +1153,7 @@ export default function App() {
                     )}
                     {ptStatus === "insufficient-data" && (
                       <p className="mb-5 rounded-lg border border-[#1E1E1E] bg-[#0D0D0D] p-3 text-sm leading-relaxed text-white/75">
-                        Für dieses Modelljahr liegen noch nicht genügend historische Daten für eine belastbare Prognose vor. Der bisherige Preisverlauf wird trotzdem angezeigt.
+                        Für diesen Jahrgang liegen noch nicht genügend historische Daten für eine belastbare Prognose vor. Der bisherige Preisverlauf wird trotzdem angezeigt.
                       </p>
                     )}
                     {ptData.history.length > 0 && (
