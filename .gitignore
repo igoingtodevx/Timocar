@@ -8,3 +8,5 @@ coverage/
 !.env.example
 
 .vercel
+dogfood-output/
+SESSION-NOTES.md
