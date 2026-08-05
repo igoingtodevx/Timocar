@@ -395,9 +395,16 @@ export default function App() {
 
   const handlePtVariantSelect = async (option: VariantOption) => {
     const modelId = option.modelId;
+    // Nur abhängige Zustände zurücksetzen — query und modelId bleiben erhalten.
+    // (resetPriceTrendResult() darf hier NICHT verwendet werden: es löscht
+    //  ptVariantQuery und ptModelId und würde die Auswahl sofort verwerfen.)
+    setPtYears([]);
+    setPtModelYear(null);
+    setPtData(null);
+    setPtError(null);
+
     setPtVariantQuery(option.displayName);
     setPtModelId(modelId);
-    resetPriceTrendResult();
     setPtStatus("loading-years");
     try {
       const res = await fetch(`/api/price-trend/models/${modelId}/years`);
