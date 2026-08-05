@@ -32,7 +32,7 @@ import {
   normalizeAdminOrderUpdate,
   normalizeStorefrontSettings,
 } from "../shared/admin.ts";
-import { findModel } from "../shared/pkw-models.ts";
+import { findVariant } from "../shared/pkw-models.ts";
 import {
   normalizeCohortResponse,
   forecastCohort,
@@ -1380,11 +1380,23 @@ function uniqueSortedYears(raw: unknown): number[] {
   for (const entry of modelYears) {
     if (typeof entry !== "object" || entry === null) continue;
     const year = (entry as { year?: unknown }).year;
-    if (typeof year === "number" && Number.isInteger(year) && year >= 1900 && year <= 2100) {
-      years.add(year);
-    }
+    if (typeof year === "number" && Number.isInteger(year) && year >= 1900 && year <= 2100) years.add(year);
   }
-  return [...years].sort((a, b) => a - b);
+  return [...years].sort((a, b) => b - a);
+}
+
+function hasValidHistory(raw: unknown, year: number): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const entries = (raw as { model_years?: unknown }).model_years;
+  if (!Array.isArray(entries)) return false;
+  const match = entries.find((entry) => entry && typeof entry === "object" && (entry as { year?: unknown }).year === year);
+  const points = match && typeof match === "object" ? (match as { chart_entities?: unknown }).chart_entities : undefined;
+  return Array.isArray(points) && points.some((point) => {
+    if (!point || typeof point !== "object") return false;
+    const price = (point as { price?: unknown }).price;
+    const timestamp = (point as { timestamp?: unknown }).timestamp;
+    return typeof price === "number" && Number.isFinite(price) && price > 0 && typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0;
+  });
 }
 
 function priceTrendUpstreamMessage(error: unknown): string {
@@ -1395,7 +1407,7 @@ function priceTrendUpstreamMessage(error: unknown): string {
   return "Die Preisdaten sind gerade nicht erreichbar. Bitte später erneut versuchen.";
 }
 
-type PriceTrendModelInfo = { id: number; name: string; make: string };
+type PriceTrendModelInfo = { id: number; name: string; make: string; series?: string; variant?: string; displayName?: string };
 type PriceTrendYearsPayload = { model: PriceTrendModelInfo; years: number[]; source: "live" | "cache" };
 type PriceTrendPayload = {
   model: PriceTrendModelInfo;
@@ -1419,7 +1431,7 @@ app.get("/api/price-trend/models/:modelId/years", async (req: Request, res: Resp
     res.status(400).json({ error: "Ungültige Modell-ID." });
     return;
   }
-  const model = findModel(modelId);
+  const model = findVariant(modelId);
   if (!model) {
     res.status(400).json({ error: "Modell nicht gefunden." });
     return;
@@ -1439,12 +1451,9 @@ app.get("/api/price-trend/models/:modelId/years", async (req: Request, res: Resp
   try {
     const url = new URL(`${PRICE_TREND_API_BASE}/models/${modelId}`);
     const raw = await priceTrendFetchJson(url);
-    const years = uniqueSortedYears(raw);
-    if (years.length === 0) {
-      throw new PriceTrendUpstreamError(0, "empty_years");
-    }
+    const years = uniqueSortedYears(raw).filter((year) => hasValidHistory(raw, year));
     const payload: PriceTrendYearsPayload = {
-      model: { id: model.id, name: model.name, make: model.make },
+      model: { id: model.modelId, name: model.variantName, make: model.brandName },
       years,
       source: "live",
     };
@@ -1475,7 +1484,7 @@ app.get("/api/price-trend", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Ungültige Modell-ID." });
     return;
   }
-  const model = findModel(modelId);
+  const model = findVariant(modelId);
   if (!model) {
     res.status(400).json({ error: "Modell nicht gefunden." });
     return;
@@ -1507,7 +1516,7 @@ app.get("/api/price-trend", async (req: Request, res: Response) => {
     url.searchParams.append("to", isoDate(now));
 
     const raw = await priceTrendFetchJson(url);
-    const points = normalizeCohortResponse(raw, modelId, model.name, modelYear);
+    const points = normalizeCohortResponse(raw, modelId, model.variantName, modelYear);
     if (points.length === 0) {
       // Externe Response enthält die angefragte Kohorte nicht (oder keine gültigen Punkte).
       res.status(400).json({ error: `Für das Modelljahr ${modelYear} sind keine Preisdaten verfügbar.` });
@@ -1516,7 +1525,7 @@ app.get("/api/price-trend", async (req: Request, res: Response) => {
 
     const { forecast, reason } = forecastCohort(points, { annualCap: safeEnvFloat("PRICE_TREND_FORECAST_CAP", 0.20) });
     const payload: PriceTrendPayload = {
-      model: { id: model.id, name: model.name, make: model.make },
+      model: { id: model.modelId, name: model.variantName, make: model.brandName },
       modelYear,
       history: points.map((p) => ({ timestamp: p.timestamp, price: p.price })),
       forecast,

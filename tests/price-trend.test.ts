@@ -148,7 +148,9 @@ test("1. Generator normalisiert Marken und Modelle korrekt", () => {
   // Sortierung nach Marke (de) → Abarth vor Volkswagen; Duplikat-ID 948 wird verworfen.
   assert.equal(models.length, 3);
   assert.deepEqual(models.map((m) => m.make), ["Abarth", "Volkswagen", "Volkswagen"]);
-  assert.deepEqual(models[1], { id: 948, make: "Volkswagen", name: "Golf" });
+  assert.equal(models[1].id, 948);
+  assert.equal(models[1].make, "Volkswagen");
+  assert.equal(models[1].name, "Golf");
   assert.equal(models[2].name, "Polo"); // getrimmt
 });
 
@@ -655,7 +657,7 @@ test("44. Jahre-Endpoint liefert eindeutige, sortierte Jahre", async () => {
   });
   const { status, body } = await get(`/api/price-trend/models/${MODEL_ID}/years`);
   assert.equal(status, 200);
-  assert.deepEqual(body.years, [2018, 2019, 2020]);
+  assert.deepEqual(body.years, [2020, 2019, 2018]);
   assert.deepEqual(body.model, { id: MODEL_ID, name: MODEL_NAME, make: MODEL_MAKE });
   assert.equal(body.source, "live");
 });

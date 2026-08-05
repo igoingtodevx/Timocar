@@ -41,7 +41,7 @@ import {
   hasOrderFormErrors,
   validateOrderForm,
 } from "../shared/order";
-import { listMakes, modelsByMake, type PkwModel } from "../shared/pkw-models";
+import { listMakes, seriesByMake, searchVariants } from "../shared/pkw-models";
 import PriceTrendChart from "./PriceTrendChart";
 
 interface CarDetail {
@@ -207,9 +207,10 @@ export default function App() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
 
-  // Preisentwicklung (V1): Marke → Modell → Modelljahr
+  // Preisentwicklung: Marke → Baureihe → Variante → Jahrgang
   const [ptMake, setPtMake] = useState("");
-  const [ptModels, setPtModels] = useState<PkwModel[]>([]);
+  const [ptSeries, setPtSeries] = useState("");
+  const [ptVariantQuery, setPtVariantQuery] = useState("");
   const [ptModelId, setPtModelId] = useState<number | null>(null);
   const [ptYears, setPtYears] = useState<number[]>([]);
   const [ptModelYear, setPtModelYear] = useState<number | null>(null);
@@ -363,7 +364,7 @@ export default function App() {
     }
   };
 
-  // ── Preisentwicklung: Marke → Modell → Modelljahr ──────────────────────
+  // ── Preisentwicklung: Marke → Baureihe → Variante → Jahrgang ───────────
   const resetPriceTrendResult = () => {
     setPtStatus("idle");
     setPtData(null);
@@ -374,12 +375,20 @@ export default function App() {
 
   const handlePtMakeChange = (make: string) => {
     setPtMake(make);
+    setPtSeries("");
+    setPtVariantQuery("");
     setPtModelId(null);
-    setPtModels(make ? modelsByMake(make) : []);
     resetPriceTrendResult();
   };
 
-  const handlePtModelChange = async (modelId: number | null) => {
+  const handlePtSeriesChange = (series: string) => {
+    setPtSeries(series);
+    setPtVariantQuery("");
+    setPtModelId(null);
+    resetPriceTrendResult();
+  };
+
+  const handlePtVariantChange = async (modelId: number | null) => {
     setPtModelId(modelId);
     resetPriceTrendResult();
     if (modelId === null) return;
@@ -387,17 +396,17 @@ export default function App() {
     try {
       const res = await fetch(`/api/price-trend/models/${modelId}/years`);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Modelljahre konnten nicht geladen werden.");
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Jahrgänge konnten nicht geladen werden.");
       const years = (data as PriceTrendYearsResponse).years ?? [];
       if (years.length === 0) {
         setPtStatus("empty");
-        setPtError("Für dieses Modell sind keine Modelljahre verfügbar.");
+        setPtError("Für diese Variante liegen derzeit keine Preisdaten vor.");
         return;
       }
       setPtYears(years);
       setPtStatus("idle");
     } catch (error) {
-      setPtError(error instanceof Error ? error.message : "Modelljahre konnten nicht geladen werden.");
+      setPtError(error instanceof Error ? error.message : "Jahrgänge konnten nicht geladen werden.");
       setPtStatus("error");
     }
   };
@@ -434,7 +443,7 @@ export default function App() {
     if (ptModelId !== null && ptModelYear !== null) {
       void loadPriceTrend(ptModelId, ptModelYear);
     } else if (ptModelId !== null) {
-      void handlePtModelChange(ptModelId);
+      void handlePtVariantChange(ptModelId);
     }
   };
 
@@ -1040,51 +1049,36 @@ export default function App() {
                   <TrendingUp className="h-4 w-4 text-brand-orange" />
                   <h3 className="font-display text-xl font-black text-white">Preisentwicklung (rechnerisch)</h3>
                 </div>
-                <p className="mb-5 text-sm text-white/70">Wähle Marke, Modell und Modelljahr, um den historischen Preisverlauf und eine rechnerische Prognose für die nächsten 60 Monate zu sehen.</p>
+                <p className="mb-5 text-sm text-white/70">Wähle Marke, Baureihe, konkrete Variante und Jahrgang, um den historischen Preisverlauf und die rechnerische Prognose zu sehen.</p>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <label htmlFor="pt-make" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Marke</label>
-                    <select
-                      id="pt-make"
-                      value={ptMake}
-                      onChange={(event) => handlePtMakeChange(event.target.value)}
-                      className="w-full cursor-pointer rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                    >
+                    <select id="pt-make" value={ptMake} onChange={(event) => handlePtMakeChange(event.target.value)} className="w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white">
                       <option value="">Marke wählen…</option>
-                      {priceTrendMakes.map((make) => (
-                        <option key={make} value={make}>{make}</option>
-                      ))}
+                      {priceTrendMakes.map((make) => <option key={make} value={make}>{make}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="pt-model" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Modell</label>
-                    <select
-                      id="pt-model"
-                      value={ptModelId ?? ""}
-                      onChange={(event) => { void handlePtModelChange(event.target.value ? Number(event.target.value) : null); }}
-                      disabled={!ptMake}
-                      className="w-full cursor-pointer rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Modell wählen…</option>
-                      {ptModels.map((model) => (
-                        <option key={model.id} value={model.id}>{model.name}</option>
-                      ))}
+                    <label htmlFor="pt-series" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Baureihe</label>
+                    <select id="pt-series" value={ptSeries} onChange={(event) => handlePtSeriesChange(event.target.value)} disabled={!ptMake} className="w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+                      <option value="">Baureihe wählen…</option>
+                      {(ptMake ? seriesByMake(ptMake) : []).map((series) => <option key={series} value={series}>{series}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="pt-year" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Modelljahr</label>
-                    <select
-                      id="pt-year"
-                      value={ptModelYear ?? ""}
-                      onChange={(event) => handlePtYearChange(event.target.value ? Number(event.target.value) : null)}
-                      disabled={ptModelId === null || ptYears.length === 0 || ptStatus === "loading-years"}
-                      className="w-full cursor-pointer rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Modelljahr wählen…</option>
-                      {ptYears.map((year) => (
-                        <option key={year} value={year}>{year}</option>
-                      ))}
+                    <label htmlFor="pt-variant-search" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Variante / Motorisierung</label>
+                    <input id="pt-variant-search" value={ptVariantQuery} onChange={(event) => setPtVariantQuery(event.target.value)} disabled={!ptSeries} placeholder="z. B. E 400" className="mb-1 w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2 text-xs text-white disabled:opacity-50" />
+                    <select id="pt-variant" value={ptModelId ?? ""} onChange={(event) => { void handlePtVariantChange(event.target.value ? Number(event.target.value) : null); }} disabled={!ptSeries} className="w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+                      <option value="">Variante wählen…</option>
+                      {searchVariants(ptVariantQuery, ptMake, ptSeries).map((variant) => <option key={variant.modelId} value={variant.modelId}>{variant.displayName}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="pt-year" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Jahrgang</label>
+                    <select id="pt-year" value={ptModelYear ?? ""} onChange={(event) => handlePtYearChange(event.target.value ? Number(event.target.value) : null)} disabled={ptModelId === null || ptYears.length === 0 || ptStatus === "loading-years"} className="w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+                      <option value="">Jahrgang wählen…</option>
+                      {ptYears.map((year) => <option key={year} value={year}>{year}</option>)}
                     </select>
                   </div>
                 </div>
