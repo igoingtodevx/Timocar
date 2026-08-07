@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -219,6 +219,7 @@ export default function App() {
   const [ptStatus, setPtStatus] = useState<PriceTrendStatus>("idle");
   const [ptData, setPtData] = useState<PriceTrendResponse | null>(null);
   const [ptError, setPtError] = useState<string | null>(null);
+  const ptRequestGenerationRef = useRef(0);
 
   const ptHasVariants = useMemo(() => {
     if (!ptMake || !ptSeries) return false;
@@ -377,7 +378,12 @@ export default function App() {
   };
 
   // ── Preisentwicklung: Marke → Baureihe → Variante → Jahrgang ───────────
+  const invalidatePriceTrendRequests = () => {
+    ptRequestGenerationRef.current += 1;
+  };
+
   const resetPriceTrendResult = () => {
+    invalidatePriceTrendRequests();
     setPtStatus("idle");
     setPtData(null);
     setPtError(null);
@@ -402,8 +408,21 @@ export default function App() {
     }
   };
 
+  const handlePtVariantQueryChange = (query: string) => {
+    setPtVariantQuery(query);
+    if (ptModelId === null) return;
+    invalidatePriceTrendRequests();
+    setPtModelId(null);
+    setPtYears([]);
+    setPtModelYear(null);
+    setPtData(null);
+    setPtError(null);
+    setPtStatus("idle");
+  };
+
   const handlePtVariantSelect = async (option: VariantOption) => {
     const modelId = option.modelId;
+    const requestGeneration = ++ptRequestGenerationRef.current;
     // Nur abhängige Zustände zurücksetzen — query und modelId bleiben erhalten.
     // (resetPriceTrendResult() darf hier NICHT verwendet werden: es löscht
     //  ptVariantQuery und ptModelId und würde die Auswahl sofort verwerfen.)
@@ -420,6 +439,7 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "Jahrgänge konnten nicht geladen werden.");
       const years = (data as PriceTrendYearsResponse).years ?? [];
+      if (requestGeneration !== ptRequestGenerationRef.current) return;
       if (years.length === 0) {
         setPtStatus("empty");
         setPtError("Für diese Variante liegen derzeit keine Preisdaten vor.");
@@ -428,12 +448,14 @@ export default function App() {
       setPtYears(years);
       setPtStatus("idle");
     } catch (error) {
+      if (requestGeneration !== ptRequestGenerationRef.current) return;
       setPtError(error instanceof Error ? error.message : "Jahrgänge konnten nicht geladen werden.");
       setPtStatus("error");
     }
   };
 
   const loadPriceTrend = async (modelId: number, modelYear: number) => {
+    const requestGeneration = ++ptRequestGenerationRef.current;
     setPtStatus("loading-trend");
     setPtData(null);
     setPtError(null);
@@ -442,9 +464,11 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "Preisdaten konnten nicht geladen werden.");
       const payload = data as PriceTrendResponse;
+      if (requestGeneration !== ptRequestGenerationRef.current) return;
       setPtData(payload);
       setPtStatus(payload.reason === "ok" ? "success" : "insufficient-data");
     } catch (error) {
+      if (requestGeneration !== ptRequestGenerationRef.current) return;
       setPtError(error instanceof Error ? error.message : "Preisdaten konnten nicht geladen werden.");
       setPtStatus("error");
     }
@@ -455,6 +479,7 @@ export default function App() {
     setPtData(null);
     setPtError(null);
     if (modelYear === null || ptModelId === null) {
+      invalidatePriceTrendRequests();
       setPtStatus("idle");
       return;
     }
@@ -1097,7 +1122,7 @@ export default function App() {
                         selectedModelId={ptModelId}
                         query={ptVariantQuery}
                         results={ptVariantOptions}
-                        onChangeQuery={setPtVariantQuery}
+                        onChangeQuery={handlePtVariantQueryChange}
                         onSelect={handlePtVariantSelect}
                       />
                     </div>
