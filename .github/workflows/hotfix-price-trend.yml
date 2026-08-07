@@ -1,0 +1,151 @@
+name: Verify final price-trend hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/price-trend-production
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Materialize all source parent model IDs and update regressions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          catalog = Path('shared/pkw-models.ts')
+          text = catalog.read_text()
+          replacement = '''function buildSyntheticSeriesParents(): PkwVariant[] {
+            const groups = new Map<number, PkwVariant[]>();
+            for (const item of PKW_VARIANTS) {
+              if (item.seriesId === undefined || !item.seriesName) continue;
+              const existing = groups.get(item.seriesId);
+              if (existing) existing.push(item);
+              else groups.set(item.seriesId, [item]);
+            }
+
+            const parents: PkwVariant[] = [];
+            for (const [seriesId, children] of groups) {
+              const first = children[0]!;
+              const seriesName = first.seriesName!;
+              const seriesNeedle = normalizeText(seriesName);
+              if (!seriesNeedle || seriesNeedle === "andere") continue;
+              if (PKW_VARIANTS.some((item) => item.modelId === seriesId)) continue;
+
+              // Keep every pkw.de source parent addressable. Some parent IDs are
+              // real price models (TT, Transit, 911, 1er Reihe, E-Klasse), while
+              // pure taxonomy IDs simply return no years from the upstream API.
+              // Name-based heuristics cannot distinguish those cases reliably.
+              parents.push({
+                brandId: first.brandId,
+                brandName: first.brandName,
+                seriesId,
+                seriesName,
+                modelId: seriesId,
+                variantName: seriesName,
+                displayName: seriesName,
+                id: seriesId,
+                make: first.brandName,
+                name: seriesName,
+              });
+            }
+            return parents;
+          }
+
+          const SYNTHETIC_SERIES_PARENTS'''
+          new_text, count = re.subn(
+              r'function buildSyntheticSeriesParents\(\): PkwVariant\[\] \{.*?\n\}\n\nconst SYNTHETIC_SERIES_PARENTS',
+              replacement,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'catalog helper replacement count={count}')
+          catalog.write_text(new_text)
+
+          exact = Path('tests/exact-variants.test.ts')
+          text = exact.read_text()
+          text, count = re.subn(
+              r'test\("V5\. GT-Sammel-ID 3136 wird NICHT als konkrete Variante angeboten", \(\) => \{.*?\n\}\);\n\ntest\("V6\.',
+              '''test("V5. Source-Parent-ID GT-Klasse bleibt auswählbar, auch wenn Upstream keine Jahre liefert", () => {
+            const parent = findVariant(GT_AGGREGATE);
+            assert.ok(parent);
+            assert.equal(parent!.variantName, "GT-Klasse");
+            assert.equal(parent!.seriesName, "GT-Klasse");
+            assert.ok(searchVariants("", "Mercedes-Benz", "GT-Klasse").some((x) => x.modelId === GT_AGGREGATE));
+          });
+
+          test("V6.''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'exact V5 replacement count={count}')
+          old = '  // Sammel-ID taucht auch global nicht auf.\n  assert.ok(searchModels("GT-Klasse").every((x) => x.modelId !== GT_AGGREGATE));'
+          new = '  // Source-Parent bleibt global adressierbar; Datenverfügbarkeit entscheidet der Years-Endpunkt.\n  assert.ok(searchModels("GT-Klasse").some((x) => x.modelId === GT_AGGREGATE));'
+          if old not in text:
+              raise SystemExit('exact V10 expectation not found')
+          exact.write_text(text.replace(old, new, 1))
+
+          regressions = Path('tests/price-trend-final-regressions.test.ts')
+          text = regressions.read_text()
+          text, count = re.subn(
+              r'test\("R3\. Reine Sammel-ID GT-Klasse bleibt ausgeschlossen", \(\) => \{.*?\n\}\);\n\ntest\("R4\.',
+              '''test("R3. Parent-IDs werden nicht mehr anhand von Namen verworfen", () => {
+            for (const [make, series, id] of [
+              ["Audi", "TT", 46],
+              ["Ford", "Transit", 309],
+              ["Porsche", "911", 762],
+              ["BMW", "1er Reihe", 970],
+              ["Mercedes-Benz", "E-Klasse", 981],
+              ["Mercedes-Benz", "GT-Klasse", 3136],
+            ] as const) {
+              const parent = findVariant(id);
+              assert.ok(parent, `${make} → ${series} (${id}) fehlt`);
+              assert.equal(parent!.variantName, series);
+              assert.ok(searchVariants("", make, series).some((item) => item.modelId === id));
+            }
+          });
+
+          test("R4.''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'final regressions R3 replacement count={count}')
+          regressions.write_text(text)
+          PY
+
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run build
+      - run: git diff --check
+
+      - name: Commit verified materialized changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add shared/pkw-models.ts tests/exact-variants.test.ts tests/price-trend-final-regressions.test.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(price-trend): expose all source parent models"
+          git push origin HEAD:hotfix/price-trend-production
