@@ -104,7 +104,25 @@ jobs:
           new = '  // Source-Parent bleibt global adressierbar; Datenverfügbarkeit entscheidet der Years-Endpunkt.\n  assert.ok(searchModels("GT-Klasse").some((x) => x.modelId === GT_AGGREGATE));'
           if old not in text:
               raise SystemExit('exact V10 expectation not found')
-          exact.write_text(text.replace(old, new, 1))
+          text = text.replace(old, new, 1)
+          text, count = re.subn(
+              r'test\("A4\. GT-Sammel-ID 3136 wird vom Backend abgelehnt, ohne externen Request", async \(\) => \{.*?\n\}\);\n\ntest\("A5\.',
+              '''test("A4. Source-Parent-ID 3136 wird vom Backend akzeptiert und folgt normalem Empty-State", async () => {
+            mockResponse = () => jsonResponse({ id: GT_AGGREGATE, name: "GT-Klasse", model_years: [] });
+            const first = await get(`/api/price-trend/models/${GT_AGGREGATE}/years`);
+            assert.equal(first.status, 200);
+            assert.deepEqual(first.body.years, []);
+            assert.equal(capturedUrls.length, 1, "Parent-ID wird normal gegen die Quelle geprüft");
+          });
+
+          test("A5.''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'exact A4 replacement count={count}')
+          exact.write_text(text)
 
           regressions = Path('tests/price-trend-final-regressions.test.ts')
           text = regressions.read_text()
