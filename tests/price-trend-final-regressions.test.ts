@@ -24,9 +24,20 @@ test("R2. Ford Transit parent bleibt neben den Transit-Derivaten auswählbar", (
   for (const id of [1886, 1585, 2514, 1584]) assert.ok(ids.includes(id), `Transit-Untermodell ${id} fehlt`);
 });
 
-test("R3. Reine Sammel-ID GT-Klasse bleibt ausgeschlossen", () => {
-  assert.equal(findVariant(3136), undefined);
-  assert.ok(searchVariants("", "Mercedes-Benz", "GT-Klasse").every((item) => item.modelId !== 3136));
+test("R3. Parent-IDs werden nicht mehr anhand von Namen verworfen", () => {
+  for (const [make, series, id] of [
+    ["Audi", "TT", 46],
+    ["Ford", "Transit", 309],
+    ["Porsche", "911", 762],
+    ["BMW", "1er Reihe", 970],
+    ["Mercedes-Benz", "E-Klasse", 981],
+    ["Mercedes-Benz", "GT-Klasse", 3136],
+  ] as const) {
+    const parent = findVariant(id);
+    assert.ok(parent, `${make} → ${series} (${id}) fehlt`);
+    assert.equal(parent!.variantName, series);
+    assert.ok(searchVariants("", make, series).some((item) => item.modelId === id));
+  }
 });
 
 test("R4. Doppelte model_years-Kohorten werden zusammengeführt", () => {

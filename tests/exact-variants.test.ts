@@ -109,13 +109,12 @@ test("V4. AMG GT und konkrete GT-Varianten sind verfügbar", () => {
   }
 });
 
-test("V5. GT-Sammel-ID 3136 wird NICHT als konkrete Variante angeboten", () => {
-  assert.equal(findVariant(GT_AGGREGATE), undefined);
-  assert.equal(PKW_VARIANTS.some((item) => item.modelId === GT_AGGREGATE), false);
-  // Keine Suche darf die Sammel-ID zurückliefern.
-  for (const query of ["GT", "AMG GT", "GT-Klasse"]) {
-    assert.ok(searchVariants(query, "Mercedes-Benz", "GT-Klasse").every((x) => x.modelId !== GT_AGGREGATE));
-  }
+test("V5. Source-Parent-ID GT-Klasse bleibt auswählbar, auch wenn Upstream keine Jahre liefert", () => {
+  const parent = findVariant(GT_AGGREGATE);
+  assert.ok(parent);
+  assert.equal(parent!.variantName, "GT-Klasse");
+  assert.equal(parent!.seriesName, "GT-Klasse");
+  assert.ok(searchVariants("", "Mercedes-Benz", "GT-Klasse").some((x) => x.modelId === GT_AGGREGATE));
 });
 
 test("V6. E 320 d wird nicht erfunden, E 320 (Quelle) existiert", () => {
@@ -183,8 +182,8 @@ test("V10. searchModels findet konkrete Mercedes-Varianten global", () => {
   assert.ok(results.some((x) => x.modelId === E400 && x.brandName === "Mercedes-Benz"));
   const gt = searchModels("AMG GT");
   assert.ok(gt.some((x) => x.modelId === GT));
-  // Sammel-ID taucht auch global nicht auf.
-  assert.ok(searchModels("GT-Klasse").every((x) => x.modelId !== GT_AGGREGATE));
+  // Source-Parent bleibt global adressierbar; Datenverfügbarkeit entscheidet der Years-Endpunkt.
+  assert.ok(searchModels("GT-Klasse").some((x) => x.modelId === GT_AGGREGATE));
 });
 
 test("V11. modelsByMake liefert nur Modelle der gewählten Marke", () => {
@@ -311,13 +310,12 @@ test("A3. Variante ohne Preisdaten liefert leere Jahre (Empty-State) statt Fehle
   assert.deepEqual(body.years, []);
 });
 
-test("A4. GT-Sammel-ID 3136 wird vom Backend abgelehnt, ohne externen Request", async () => {
+test("A4. Source-Parent-ID 3136 wird vom Backend akzeptiert und folgt normalem Empty-State", async () => {
+  mockResponse = () => jsonResponse({ id: GT_AGGREGATE, name: "GT-Klasse", model_years: [] });
   const first = await get(`/api/price-trend/models/${GT_AGGREGATE}/years`);
-  assert.equal(first.status, 400, "Sammel-ID ist kein konkretes Modell → 400");
-  assert.equal(capturedUrls.length, 0, "kein externer Request für Sammel-ID");
-  const trend = await get(`/api/price-trend?modelId=${GT_AGGREGATE}&modelYear=2019`);
-  assert.equal(trend.status, 400, "kein roter technischer Fehler");
-  assert.equal(capturedUrls.length, 0);
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.body.years, []);
+  assert.equal(capturedUrls.length, 1, "Parent-ID wird normal gegen die Quelle geprüft");
 });
 
 test("A5. Konkrete Variante E 400 liefert gültige Preisdaten", async () => {

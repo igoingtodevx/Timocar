@@ -1910,21 +1910,12 @@ function buildSyntheticSeriesParents(): PkwVariant[] {
     const seriesName = first.seriesName!;
     const seriesNeedle = normalizeText(seriesName);
     if (!seriesNeedle || seriesNeedle === "andere") continue;
-
-    // pkw.de uses variants[] both for pure grouping nodes (e.g. E-Klasse)
-    // and for real base models with derivatives (e.g. TT, Transit, T5).
-    // A parent behaves like a concrete model when child names extend the
-    // parent name itself. Pure taxonomy groups do not satisfy this rule.
-    const behavesLikeConcreteModel = children.some((item) => {
-      const variant = normalizeText(item.variantName);
-      return variant === seriesNeedle
-        || variant.startsWith(seriesNeedle + " ")
-        || variant.startsWith(seriesNeedle + "-")
-        || variant.startsWith(seriesNeedle + "/");
-    });
-    if (!behavesLikeConcreteModel) continue;
     if (PKW_VARIANTS.some((item) => item.modelId === seriesId)) continue;
 
+    // Keep every pkw.de source parent addressable. Some parent IDs are
+    // real price models (TT, Transit, 911, 1er Reihe, E-Klasse), while
+    // pure taxonomy IDs simply return no years from the upstream API.
+    // Name-based heuristics cannot distinguish those cases reliably.
     parents.push({
       brandId: first.brandId,
       brandName: first.brandName,
