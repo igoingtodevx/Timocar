@@ -18,7 +18,9 @@ import {
   searchVariants,
   modelsByMake,
   listMakes,
+  modelForSeries,
   seriesByMake,
+  seriesHasVariants,
 } from "../shared/pkw-models.ts";
 
 // ── Test-Umgebung (Muster aus tests/price-trend.test.ts) ───────────────────
@@ -51,6 +53,16 @@ const GTS = 2706; // Mercedes-Benz GT-Klasse → AMG GT S
 const GT_AGGREGATE = 3136; // Sammel-ID GT-Klasse (keine Preisdaten, nie als Variante)
 const E320 = 550; // E-Klasse → E 320 („E 320 d“ existiert nicht exakt)
 const MODEL_ID = 948; // VW Golf
+
+const MODEL_ONLY_SERIES_CASES: Array<[string, string, number]> = [
+  ["Abarth", "595", 1813],
+  ["Alfa Romeo", "Giulia", 18],
+  ["Alpina", "B3", 21],
+  ["Bentley", "Continental GT", 1831],
+  ["Rolls-Royce", "Ghost", 1601],
+  ["Audi", "A3", 34],
+  ["Ford", "Mustang", 303],
+];
 
 // ── Verifizierte Varianten ──────────────────────────────────────────────────
 
@@ -131,6 +143,28 @@ test("V8. Kompakte Schreibweisen bleiben funktionsfähig", () => {
   assert.equal(searchVariants("s63", "Mercedes-Benz", "S-Klasse")[0]?.modelId, S63);
   assert.equal(searchVariants("amg-gt", "Mercedes-Benz", "GT-Klasse")[0]?.modelId, GT);
   assert.equal(searchVariants("amg gt", "Mercedes-Benz", "GT-Klasse")[0]?.modelId, GT);
+});
+
+test("V9. Modelle ohne Varianten sind direkt als Baureihe auswählbar", () => {
+  for (const [make, series, modelId] of MODEL_ONLY_SERIES_CASES) {
+    assert.ok(seriesByMake(make).includes(series), `${make} → ${series} fehlt`);
+    const result = searchVariants(series, make, series);
+    assert.equal(result.length, 1, `${make} → ${series} darf keine zweite Auswahl erzwingen`);
+    assert.equal(result[0]?.modelId, modelId);
+    assert.equal(result[0]?.seriesId, undefined);
+    assert.equal(seriesHasVariants(make, series), false);
+    assert.equal(modelForSeries(make, series)?.modelId, modelId);
+  }
+
+  for (const [make, series, variant, modelId] of [
+    ["Audi", "TT", "TT RS", 1659],
+    ["Ford", "Transit", "Transit Custom", 2514],
+    ["Mercedes-Benz", "E-Klasse", "E 400", E400],
+  ] as const) {
+    assert.equal(seriesHasVariants(make, series), true);
+    assert.equal(modelForSeries(make, series), undefined);
+    assert.equal(searchVariants(variant, make, series)[0]?.modelId, modelId);
+  }
 });
 
 // ── Globale Suche (Kompatibilität) ─────────────────────────────────────────

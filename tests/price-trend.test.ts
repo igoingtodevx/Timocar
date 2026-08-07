@@ -151,6 +151,7 @@ test("1. Generator normalisiert Marken und Modelle korrekt", () => {
   assert.equal(models[1].id, 948);
   assert.equal(models[1].make, "Volkswagen");
   assert.equal(models[1].name, "Golf");
+  assert.equal(models[1].seriesName, "Golf");
   assert.equal(models[2].name, "Polo"); // getrimmt
 });
 

@@ -1891,19 +1891,32 @@ function normalizeText(value: string): string {
   return value.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim();
 }
 
+function catalogSeriesName(item: PkwVariant): string {
+  return item.seriesName ?? item.variantName;
+}
+
 export function listMakes(): string[] {
   return [...new Set(PKW_VARIANTS.map((item) => item.brandName))];
 }
 
 export function seriesByMake(make: string): string[] {
   const needle = normalizeText(make);
-  return [...new Set(PKW_VARIANTS.filter((item) => normalizeText(item.brandName) === needle && item.seriesName).map((item) => item.seriesName!))].sort((a, b) => a.localeCompare(b, "de"));
+  return [...new Set(PKW_VARIANTS.filter((item) => normalizeText(item.brandName) === needle).map(catalogSeriesName))].sort((a, b) => a.localeCompare(b, "de"));
 }
 
 export function variantsByMake(make: string, series?: string): PkwVariant[] {
   const makeNeedle = normalizeText(make);
   const seriesNeedle = normalizeText(series ?? "");
-  return PKW_VARIANTS.filter((item) => normalizeText(item.brandName) === makeNeedle && (!seriesNeedle || normalizeText(item.seriesName ?? "") === seriesNeedle));
+  return PKW_VARIANTS.filter((item) => normalizeText(item.brandName) === makeNeedle && (!seriesNeedle || normalizeText(catalogSeriesName(item)) === seriesNeedle));
+}
+
+export function seriesHasVariants(make: string, series: string): boolean {
+  return variantsByMake(make, series).some((item) => item.seriesId !== undefined);
+}
+
+export function modelForSeries(make: string, series: string): PkwVariant | undefined {
+  if (!series.trim() || seriesHasVariants(make, series)) return undefined;
+  return variantsByMake(make, series).find((item) => item.seriesId === undefined);
 }
 
 function searchKey(value: string): string {

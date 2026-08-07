@@ -41,7 +41,7 @@ import {
   hasOrderFormErrors,
   validateOrderForm,
 } from "../shared/order";
-import { listMakes, seriesByMake, searchVariants } from "../shared/pkw-models";
+import { listMakes, modelForSeries, seriesByMake, seriesHasVariants, searchVariants } from "../shared/pkw-models";
 import type { VariantOption } from "./VariantCombobox";
 import VariantCombobox from "./VariantCombobox";
 import PriceTrendChart from "./PriceTrendChart";
@@ -220,10 +220,15 @@ export default function App() {
   const [ptData, setPtData] = useState<PriceTrendResponse | null>(null);
   const [ptError, setPtError] = useState<string | null>(null);
 
+  const ptHasVariants = useMemo(() => {
+    if (!ptMake || !ptSeries) return false;
+    return seriesHasVariants(ptMake, ptSeries);
+  }, [ptMake, ptSeries]);
+
   const ptVariantOptions = useMemo(() => {
-    if (!ptMake || !ptSeries) return [];
+    if (!ptMake || !ptSeries || !ptHasVariants) return [];
     return searchVariants(ptVariantQuery, ptMake, ptSeries);
-  }, [ptVariantQuery, ptMake, ptSeries]);
+  }, [ptVariantQuery, ptMake, ptHasVariants, ptSeries]);
 
   const [orderForm, setOrderForm] = useState<OrderFormData>(emptyOrderForm);
   const [formErrors, setFormErrors] = useState<OrderFormErrors>({});
@@ -391,6 +396,10 @@ export default function App() {
   const handlePtSeriesChange = (series: string) => {
     setPtSeries(series);
     resetPriceTrendResult();
+    const directModel = modelForSeries(ptMake, series);
+    if (directModel) {
+      void handlePtVariantSelect({ modelId: directModel.modelId, displayName: directModel.displayName });
+    }
   };
 
   const handlePtVariantSelect = async (option: VariantOption) => {
@@ -1062,7 +1071,7 @@ export default function App() {
                   <TrendingUp className="h-4 w-4 text-brand-orange" />
                   <h3 className="font-display text-xl font-black text-white">Preisentwicklung (rechnerisch)</h3>
                 </div>
-                <p className="mb-5 text-sm text-white/70">Wähle Marke, Baureihe, konkrete Variante und Jahrgang, um den historischen Preisverlauf und die rechnerische Prognose zu sehen.</p>
+                <p className="mb-5 text-sm text-white/70">Wähle Marke, Baureihe und Jahrgang. Bei Baureihen mit konkreten Varianten wählst du zusätzlich die Variante.</p>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
@@ -1079,18 +1088,20 @@ export default function App() {
                       {(ptMake ? seriesByMake(ptMake) : []).map((series) => <option key={series} value={series}>{series}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <VariantCombobox
-                      disabled={!ptSeries}
-                      make={ptMake}
-                      series={ptSeries}
-                      selectedModelId={ptModelId}
-                      query={ptVariantQuery}
-                      results={ptVariantOptions}
-                      onChangeQuery={setPtVariantQuery}
-                      onSelect={handlePtVariantSelect}
-                    />
-                  </div>
+                  {ptHasVariants && (
+                    <div>
+                      <VariantCombobox
+                        disabled={!ptSeries}
+                        make={ptMake}
+                        series={ptSeries}
+                        selectedModelId={ptModelId}
+                        query={ptVariantQuery}
+                        results={ptVariantOptions}
+                        onChangeQuery={setPtVariantQuery}
+                        onSelect={handlePtVariantSelect}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label htmlFor="pt-year" className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-white/60">Jahrgang</label>
                     <select id="pt-year" value={ptModelYear ?? ""} onChange={(event) => handlePtYearChange(event.target.value ? Number(event.target.value) : null)} disabled={ptModelId === null || ptYears.length === 0 || ptStatus === "loading-years"} className="w-full rounded-lg border border-[#222222] bg-[#0D0D0D] px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50">
