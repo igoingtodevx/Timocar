@@ -42,7 +42,16 @@ export function normalizeCatalog(raw: unknown): NormalizedVariant[] {
       const seriesName = clean(m.name);
       if (!validId(m.id) || !seriesName) continue;
       const variants = Array.isArray(m.variants) ? m.variants : [];
-      const entries = variants.length > 0 ? variants : [{ id: m.id, name: m.name }];
+
+      // Preserve the source model ID even when pkw.de also exposes variants[].
+      // Some parents are real price-trend models themselves (e.g. Audi TT,
+      // Ford Transit, Porsche 911, BMW 1er Reihe, Mercedes E-Klasse); others
+      // are taxonomy/group IDs and simply return no years at runtime. Dropping
+      // parents based on naming heuristics loses valid vehicles systemically.
+      const entries: RawVariant[] = variants.length > 0
+        ? [{ id: m.id, name: m.name }, ...variants]
+        : [{ id: m.id, name: m.name }];
+
       for (const item of entries) {
         if (!item || typeof item !== "object") continue;
         const v = item as RawVariant;
@@ -50,11 +59,11 @@ export function normalizeCatalog(raw: unknown): NormalizedVariant[] {
         const name = clean(v.name);
         if (!validId(id) || !name || seen.has(id)) continue;
         seen.add(id);
-        const isAggregate = variants.length === 0;
+        const hasVariants = variants.length > 0;
         result.push({
           brandId: b.id,
           brandName,
-          ...(isAggregate ? { seriesName } : { seriesId: m.id, seriesName }),
+          ...(hasVariants ? { seriesId: m.id, seriesName } : { seriesName }),
           modelId: id,
           variantName: name,
           displayName: name,
@@ -83,54 +92,6 @@ function catalogSeriesName(item: PkwVariant): string {
   return item.seriesName ?? item.variantName;
 }
 
-function buildSyntheticSeriesParents(): PkwVariant[] {
-  const groups = new Map<number, PkwVariant[]>();
-  for (const item of PKW_VARIANTS) {
-    if (item.seriesId === undefined || !item.seriesName) continue;
-    const existing = groups.get(item.seriesId);
-    if (existing) existing.push(item);
-    else groups.set(item.seriesId, [item]);
-  }
-
-  const parents: PkwVariant[] = [];
-  for (const [seriesId, children] of groups) {
-    const first = children[0]!;
-    const seriesName = first.seriesName!;
-    const seriesNeedle = normalizeText(seriesName);
-    if (!seriesNeedle || seriesNeedle === "andere") continue;
-
-    // pkw.de uses variants[] both for pure grouping nodes (e.g. E-Klasse)
-    // and for real base models with derivatives (e.g. TT, Transit, T5).
-    // A parent behaves like a concrete model when child names extend the
-    // parent name itself. Pure taxonomy groups do not satisfy this rule.
-    const behavesLikeConcreteModel = children.some((item) => {
-      const variant = normalizeText(item.variantName);
-      return variant === seriesNeedle
-        || variant.startsWith(seriesNeedle + " ")
-        || variant.startsWith(seriesNeedle + "-")
-        || variant.startsWith(seriesNeedle + "/");
-    });
-    if (!behavesLikeConcreteModel) continue;
-    if (PKW_VARIANTS.some((item) => item.modelId === seriesId)) continue;
-
-    parents.push({
-      brandId: first.brandId,
-      brandName: first.brandName,
-      seriesId,
-      seriesName,
-      modelId: seriesId,
-      variantName: seriesName,
-      displayName: seriesName,
-      id: seriesId,
-      make: first.brandName,
-      name: seriesName,
-    });
-  }
-  return parents;
-}
-
-const SYNTHETIC_SERIES_PARENTS: readonly PkwVariant[] = buildSyntheticSeriesParents();
-
 export function listMakes(): string[] {
   return [...new Set(PKW_VARIANTS.map((item) => item.brandName))];
 }
@@ -143,10 +104,7 @@ export function seriesByMake(make: string): string[] {
 export function variantsByMake(make: string, series?: string): PkwVariant[] {
   const makeNeedle = normalizeText(make);
   const seriesNeedle = normalizeText(series ?? "");
-  const base = PKW_VARIANTS.filter((item) => normalizeText(item.brandName) === makeNeedle && (!seriesNeedle || normalizeText(catalogSeriesName(item)) === seriesNeedle));
-  if (!seriesNeedle) return base;
-  const parents = SYNTHETIC_SERIES_PARENTS.filter((item) => normalizeText(item.brandName) === makeNeedle && normalizeText(catalogSeriesName(item)) === seriesNeedle);
-  return [...parents, ...base];
+  return PKW_VARIANTS.filter((item) => normalizeText(item.brandName) === makeNeedle && (!seriesNeedle || normalizeText(catalogSeriesName(item)) === seriesNeedle));
 }
 
 export function seriesHasVariants(make: string, series: string): boolean {
@@ -169,13 +127,13 @@ export function searchVariants(query: string, make?: string, series?: string, li
 }
 
 export function findVariant(id: number): PkwVariant | undefined {
-  return PKW_VARIANTS.find((item) => item.modelId === id) ?? SYNTHETIC_SERIES_PARENTS.find((item) => item.modelId === id);
+  return PKW_VARIANTS.find((item) => item.modelId === id);
 }
 
 export function searchModels(query: string, limit = 50): PkwVariant[] {
   const needle = searchKey(query);
   if (!needle) return [];
-  return [...SYNTHETIC_SERIES_PARENTS, ...PKW_VARIANTS].filter((item) => searchKey([item.brandName, item.seriesName ?? "", item.variantName, item.displayName].join(" ")).includes(needle)).slice(0, limit);
+  return PKW_VARIANTS.filter((item) => searchKey([item.brandName, item.seriesName ?? "", item.variantName, item.displayName].join(" ")).includes(needle)).slice(0, limit);
 }
 
 export const findModel = findVariant;
