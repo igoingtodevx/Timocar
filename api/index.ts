@@ -1282,7 +1282,7 @@ const priceTrendRateMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkPriceTrendRateLimit(namespace: string, ip: string): boolean {
   const key = `price-trend:${namespace}:${ip}`;
-  const limit = safeEnvInt("PRICE_TREND_RATE_LIMIT", 10);
+  const limit = safeEnvInt("PRICE_TREND_RATE_LIMIT", 30);
   const windowMs = safeEnvInt("PRICE_TREND_RATE_WINDOW_MS", 60_000);
   const now = Date.now();
   const entry = priceTrendRateMap.get(key);
@@ -1389,13 +1389,15 @@ function hasValidHistory(raw: unknown, year: number): boolean {
   if (!raw || typeof raw !== "object") return false;
   const entries = (raw as { model_years?: unknown }).model_years;
   if (!Array.isArray(entries)) return false;
-  const match = entries.find((entry) => entry && typeof entry === "object" && (entry as { year?: unknown }).year === year);
-  const points = match && typeof match === "object" ? (match as { chart_entities?: unknown }).chart_entities : undefined;
-  return Array.isArray(points) && points.some((point) => {
-    if (!point || typeof point !== "object") return false;
-    const price = (point as { price?: unknown }).price;
-    const timestamp = (point as { timestamp?: unknown }).timestamp;
-    return typeof price === "number" && Number.isFinite(price) && price > 0 && typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0;
+  return entries.some((entry) => {
+    if (!entry || typeof entry !== "object" || (entry as { year?: unknown }).year !== year) return false;
+    const points = (entry as { chart_entities?: unknown }).chart_entities;
+    return Array.isArray(points) && points.some((point) => {
+      if (!point || typeof point !== "object") return false;
+      const price = (point as { price?: unknown }).price;
+      const timestamp = (point as { timestamp?: unknown }).timestamp;
+      return typeof price === "number" && Number.isFinite(price) && price > 0 && typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0;
+    });
   });
 }
 
@@ -1436,15 +1438,14 @@ app.get("/api/price-trend/models/:modelId/years", async (req: Request, res: Resp
     res.status(400).json({ error: "Modell nicht gefunden." });
     return;
   }
-  if (!checkPriceTrendRateLimit("years", getClientIp(req))) {
-    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
-    return;
-  }
-
   const cacheKey = `price-trend-years:${modelId}`;
   const cached = priceTrendCacheGet(cacheKey);
   if (cached) {
     res.json({ ...(cached as PriceTrendYearsPayload), source: "cache" });
+    return;
+  }
+  if (!checkPriceTrendRateLimit("years", getClientIp(req))) {
+    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
     return;
   }
 
@@ -1494,15 +1495,14 @@ app.get("/api/price-trend", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Ungültiges Modelljahr." });
     return;
   }
-  if (!checkPriceTrendRateLimit("trend", getClientIp(req))) {
-    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
-    return;
-  }
-
   const cacheKey = `price-trend:${modelId}:${modelYear}`;
   const cached = priceTrendCacheGet(cacheKey);
   if (cached) {
     res.json({ ...(cached as PriceTrendPayload), source: "cache" });
+    return;
+  }
+  if (!checkPriceTrendRateLimit("trend", getClientIp(req))) {
+    res.status(429).json({ error: "Zu viele Anfragen. Bitte warte kurz." });
     return;
   }
 

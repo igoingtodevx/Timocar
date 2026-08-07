@@ -594,15 +594,20 @@ test("38. Feature-Flag false → 503", async () => {
   }
 });
 
-test("39. Rate-Limit → 429", async () => {
+test("39. Cache-Hits verbrauchen kein Rate-Limit; weitere Misses werden begrenzt", async () => {
   process.env.PRICE_TREND_RATE_LIMIT = "1";
   try {
     mockResponse = () => jsonResponse(cohortRaw(2019, 14000, 1.005, 30));
     const first = await get(`/api/price-trend?modelId=${MODEL_ID}&modelYear=2019`);
     assert.equal(first.status, 200);
-    const second = await get(`/api/price-trend?modelId=${MODEL_ID}&modelYear=2019`);
-    assert.equal(second.status, 429);
-    assert.equal(capturedUrls.length, 1, "Rate-Limit muss vor dem externen Request greifen");
+    const cached = await get(`/api/price-trend?modelId=${MODEL_ID}&modelYear=2019`);
+    assert.equal(cached.status, 200, "Cache-Hit darf nicht am Rate-Limit scheitern");
+    assert.equal(cached.body.source, "cache");
+    assert.equal(capturedUrls.length, 1);
+
+    const miss = await get(`/api/price-trend?modelId=${MODEL_ID}&modelYear=2020`);
+    assert.equal(miss.status, 429, "zweiter Upstream-Miss im Fenster muss begrenzt werden");
+    assert.equal(capturedUrls.length, 1, "429 muss vor einem weiteren externen Request greifen");
   } finally {
     delete process.env.PRICE_TREND_RATE_LIMIT;
   }

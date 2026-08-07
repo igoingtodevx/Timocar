@@ -90,7 +90,7 @@ function median(values: number[]): number {
 /**
  * Normalisiert die Response der externen API für GENAU EINE angefragte Kohorte.
  *
- * - Nur der model_years-Eintrag mit `year === modelYear` wird übernommen.
+ * - Alle model_years-Einträge mit `year === modelYear` werden zusammengeführt.
  * - `price` muss endlich und > 0 sein, `timestamp` endlich und > 0.
  * - `weight` wird defensiv als String→Number geparst (ungültig → 0), aber nie
  *   prognostisch verwendet.
@@ -108,39 +108,40 @@ export function normalizeCohortResponse(
   const record = raw as { model_years?: unknown };
   if (!Array.isArray(record.model_years)) return [];
 
-  const cohort = record.model_years.find((entry: unknown): entry is { year?: unknown; chart_entities?: unknown } => {
+  const cohorts = record.model_years.filter((entry: unknown): entry is { year?: unknown; chart_entities?: unknown } => {
     if (typeof entry !== "object" || entry === null) return false;
-    const candidate = entry as { year?: unknown };
-    return candidate.year === modelYear;
+    return (entry as { year?: unknown }).year === modelYear;
   });
-  if (!cohort || !Array.isArray(cohort.chart_entities)) return [];
+  if (cohorts.length === 0) return [];
 
   const seen = new Set<string>();
   const points: PricePoint[] = [];
 
-  for (const entity of cohort.chart_entities) {
-    if (typeof entity !== "object" || entity === null) continue;
-    const { price, timestamp, weight } = entity as { price?: unknown; timestamp?: unknown; weight?: unknown };
+  for (const cohort of cohorts) {
+    if (!Array.isArray(cohort.chart_entities)) continue;
+    for (const entity of cohort.chart_entities) {
+      if (typeof entity !== "object" || entity === null) continue;
+      const { price, timestamp, weight } = entity as { price?: unknown; timestamp?: unknown; weight?: unknown };
 
-    if (!isFiniteNumber(price) || price <= 0) continue;
-    if (!isFiniteNumber(timestamp) || timestamp <= 0) continue;
+      if (!isFiniteNumber(price) || price <= 0) continue;
+      if (!isFiniteNumber(timestamp) || timestamp <= 0) continue;
 
-    const key = `${modelId}:${modelYear}:${timestamp}`;
-    if (seen.has(key)) continue; // deterministisch: erster Wert gewinnt
-    seen.add(key);
+      const key = `${modelId}:${modelYear}:${timestamp}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-    let parsedWeight = 0;
-    if (typeof weight === "string" && weight.trim() !== "") {
-      const numeric = Number(weight);
-      if (Number.isFinite(numeric) && numeric > 0) parsedWeight = numeric;
-    } else if (isFiniteNumber(weight) && weight > 0) {
-      parsedWeight = weight;
+      let parsedWeight = 0;
+      if (typeof weight === "string" && weight.trim() !== "") {
+        const numeric = Number(weight);
+        if (Number.isFinite(numeric) && numeric > 0) parsedWeight = numeric;
+      } else if (isFiniteNumber(weight) && weight > 0) {
+        parsedWeight = weight;
+      }
+
+      points.push({ modelId, modelName, modelYear, timestamp, price, weight: parsedWeight });
     }
-
-    points.push({ modelId, modelName, modelYear, timestamp, price, weight: parsedWeight });
   }
 
-  // Stabil sortieren: gleiche Timestamps behalten ihre Reihenfolge.
   points.sort((a, b) => a.timestamp - b.timestamp);
   return points;
 }
